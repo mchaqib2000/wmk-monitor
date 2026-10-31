@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: wmk-monitor
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: node server/index.js
+    envVars:
+      - key: NODE_VERSION
+        value: 20.18.0
+      - key: PORT
+        value: 3000
