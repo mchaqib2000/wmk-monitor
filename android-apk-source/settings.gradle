@@ -1,0 +1,2 @@
+rootProject.name = "WMK Monitor"
+include ':app'

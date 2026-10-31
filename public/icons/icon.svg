@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="wmkGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#128C7E" />
+      <stop offset="100%" stop-color="#075E54" />
+    </linearGradient>
+  </defs>
+  <!-- Background Circle -->
+  <circle cx="256" cy="256" r="240" fill="url(#wmkGrad)" />
+  
+  <!-- Outer Shield / Guard Ring -->
+  <circle cx="256" cy="256" r="210" fill="none" stroke="#25D366" stroke-width="8" stroke-dasharray="16 10" opacity="0.6"/>
+
+  <!-- Chat Bubble Silhouette -->
+  <path d="M 256 120 C 170 120 100 182 100 258 C 100 286 110 312 128 334 L 112 392 L 174 378 C 198 390 226 396 256 396 C 342 396 412 334 412 258 C 412 182 342 120 256 120 Z" fill="#ffffff" />
+  
+  <!-- Lock Symbol for Read-Only -->
+  <rect x="220" y="240" width="72" height="60" rx="10" fill="#075E54" />
+  <path d="M 234 240 L 234 218 C 234 205 244 195 256 195 C 268 195 278 205 278 218 L 278 240" fill="none" stroke="#075E54" stroke-width="12" stroke-linecap="round" />
+  
+  <!-- Red Dot for Anti-Delete Indicator -->
+  <circle cx="350" cy="180" r="28" fill="#FF3B30" stroke="#ffffff" stroke-width="6" />
+  
+  <!-- WMK Letters at bottom -->
+  <text x="256" y="460" font-family="system-ui, -apple-system, sans-serif" font-weight="900" font-size="52" fill="#ffffff" text-anchor="middle" letter-spacing="4">WMK</text>
+</svg>

@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>WMK - WhatsApp Monitor</title>
+    
+    <!-- PWA & Mobile Web Meta -->
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#075e54">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="WMK">
+    <link rel="icon" type="image/svg+xml" href="/icons/icon.svg">
+    <link rel="apple-touch-icon" href="/icons/icon.svg">
+
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- PWA Install Banner -->
+        <div id="install-banner" class="install-banner">
+            <span>📲 Pasang <b>WMK</b> ke layar utama HP</span>
+            <button id="install-pwa-btn" class="install-btn">Pasang</button>
+        </div>
+
+        <!-- ============================================== -->
+        <!-- SCREEN 1: BARCODE / QR SCAN SCREEN             -->
+        <!-- ============================================== -->
+        <div id="screen-qr" class="screen qr-screen active">
+            <div class="qr-card">
+                <div style="margin-bottom: 12px;">
+                    <img src="/icons/icon.svg" width="56" height="56" alt="WMK Logo" style="border-radius: 12px;">
+                </div>
+                <h2>WMK Monitor</h2>
+                <p class="desc">WhatsApp Monitor HP ke HP (Read-Only)</p>
+
+                <div class="qr-image-wrapper">
+                    <div id="qr-loading" class="qr-loading">
+                        <div class="spinner"></div>
+                        <span>Membuat Barcode WhatsApp...</span>
+                    </div>
+                    <img id="qr-image" src="" alt="WhatsApp QR Code" style="display: none;">
+                </div>
+
+                <div class="qr-instructions">
+                    <h4>Cara Menautkan Barcode:</h4>
+                    <ol>
+                        <li>Buka aplikasi <b>WhatsApp</b> di HP target (Anak).</li>
+                        <li>Ketuk <b>Titik 3</b> (Android) atau <b>Pengaturan</b> (iPhone).</li>
+                        <li>Pilih <b>Perangkat Tertaut</b> (Linked Devices).</li>
+                        <li>Ketuk <b>Tautkan Perangkat</b> lalu scan barcode di atas.</li>
+                    </ol>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============================================== -->
+        <!-- SCREEN 2: CHAT LIST SCREEN                     -->
+        <!-- ============================================== -->
+        <div id="screen-chat-list" class="screen">
+            <!-- App Header -->
+            <header class="app-header">
+                <div class="header-title-box">
+                    <div class="header-title">
+                        WMK
+                        <span class="header-badge">Read-Only</span>
+                    </div>
+                    <div id="header-status" class="header-subtitle">
+                        <span class="status-dot online"></span>
+                        <span id="target-phone-label">Terhubung</span>
+                    </div>
+                </div>
+                <div class="header-actions">
+                    <button id="refresh-chats-btn" class="icon-btn" title="Segarkan">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M23 4v6h-6M1 20v-6h6"></path>
+                            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                        </svg>
+                    </button>
+                    <button id="menu-btn" class="icon-btn" title="Menu">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="1"></circle>
+                            <circle cx="12" cy="5" r="1"></circle>
+                            <circle cx="12" cy="19" r="1"></circle>
+                        </svg>
+                    </button>
+                </div>
+            </header>
+
+            <!-- Search Bar -->
+            <div class="search-container">
+                <div class="search-box">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#667781" stroke-width="2">
+                        <circle cx="11" cy="11" r="8"></circle>
+                        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                    </svg>
+                    <input type="text" id="search-input" placeholder="Cari nama, nomor, atau pesan...">
+                </div>
+            </div>
+
+            <!-- Chat List Scrollable Items -->
+            <div id="chat-list-container" class="chat-list-wrapper">
+                <!-- Dynamically populated by app.js -->
+            </div>
+        </div>
+
+        <!-- ============================================== -->
+        <!-- SCREEN 3: CHAT VIEW (TAMPILAN CHAT SEDERHANA)  -->
+        <!-- ============================================== -->
+        <div id="screen-chat-view" class="screen">
+            <!-- Chat View Header -->
+            <header class="chat-view-header">
+                <button id="chat-back-btn" class="back-btn" title="Kembali">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="19" y1="12" x2="5" y2="12"></line>
+                        <polyline points="12 19 5 12 12 5"></polyline>
+                    </svg>
+                </button>
+                <div id="active-chat-avatar" class="chat-view-header-avatar">?</div>
+                <div class="chat-view-header-info">
+                    <div id="active-chat-name" class="chat-view-header-name">Nama Kontak</div>
+                    <div class="chat-view-header-sub">
+                        <span id="active-chat-phone">Nomor HP</span>
+                        <span class="readonly-pill">🔒 Read-Only</span>
+                    </div>
+                </div>
+            </header>
+
+            <!-- Messages List Body -->
+            <div id="messages-container" class="messages-container">
+                <!-- Messages populated by app.js -->
+            </div>
+
+            <!-- Read-Only Banner Footer (Strictly NO send/input message bar) -->
+            <div class="readonly-footer">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/>
+                </svg>
+                <span><b>Mode Monitor (Hanya Baca):</b> Tidak dapat mengirim pesan</span>
+            </div>
+        </div>
+
+        <!-- Logout Confirmation Modal -->
+        <div id="logout-modal" class="modal-overlay">
+            <div class="modal-box">
+                <h3>Putuskan Tautan Barcode?</h3>
+                <p>Sesi monitor ke HP target akan diputus. Anda perlu scan barcode ulang jika ingin memonitor kembali.</p>
+                <div class="modal-buttons">
+                    <button id="modal-cancel-btn" class="btn btn-secondary">Batal</button>
+                    <button id="modal-confirm-logout-btn" class="btn btn-danger">Putuskan</button>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Socket.IO Client -->
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/app.js"></script>
+</body>
+</html>
