@@ -119,4 +119,23 @@ io.on('connection', (socket) => {
 
 const PORT = process.env.PORT || 3000;
 
-server.listen(PORT, '0.0.0.0
+server.listen(PORT, '0.0.0.0', () => {
+    const { bestIp, validIps } = getLocalIpAddresses();
+    console.log('========================================================');
+    console.log('   WMK - WhatsApp Monitor (Read-Only & Anti-Delete)   ');
+    console.log('========================================================');
+    console.log(`Server aktif:`);
+    console.log(`- Akses Lokal PC        : http://localhost:${PORT}`);
+    console.log(`- Akses HP Android/WiFi : http://${bestIp}:${PORT}`);
+    if (validIps.length > 1) {
+        validIps.forEach(net => {
+            if (net.address !== bestIp) {
+                console.log(`  (Alternatif IP ${net.name}): http://${net.address}:${PORT}`);
+            }
+        });
+    }
+    console.log('--------------------------------------------------------');
+    console.log('Memulai engine WhatsApp...');
+
+    whatsapp.startWhatsApp();
+});

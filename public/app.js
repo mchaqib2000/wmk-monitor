@@ -431,4 +431,19 @@ document.addEventListener('DOMContentLoaded', () => {
         .then(res => res.json())
         .then(data => {
             if (data.state === 'connected') {
-                targetPh
+                targetPhoneLabel.textContent = data.user?.phone || data.user?.name || 'Terhubung';
+                showScreen('screen-chat-list');
+                loadChatList();
+            } else if (data.state === 'qr_ready' && data.qr) {
+                qrImage.src = data.qr;
+                qrImage.style.display = 'block';
+                qrLoading.style.display = 'none';
+                showScreen('screen-qr');
+            } else {
+                showScreen('screen-qr');
+            }
+        })
+        .catch(err => {
+            console.error('Gagal mengambil status awal:', err);
+        });
+});
