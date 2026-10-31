@@ -1,0 +1,14 @@
+# Node dependencies
+node_modules/
+npm-debug.log*
+
+# Database & runtime session logs (Keep local or private)
+*.log
+.env
+
+# Android build outputs
+.gradle/
+build/
+android-apk-source/app/build/
+android-apk-source/.gradle/
+android-apk-source/local.properties
