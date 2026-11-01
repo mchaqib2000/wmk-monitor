@@ -56,7 +56,9 @@ function initDb() {
         CREATE TABLE IF NOT EXISTS contacts (
             jid TEXT PRIMARY KEY,
             name TEXT,
+            notify TEXT,
             phone_number TEXT,
+            is_address_book INTEGER DEFAULT 0,
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
         );
     `);
@@ -64,6 +66,14 @@ function initDb() {
     // Ensure last_message_from_me column exists in chats
     try {
         db.prepare('ALTER TABLE chats ADD COLUMN last_message_from_me INTEGER DEFAULT 0').run();
+    } catch (e) {}
+
+    // Ensure notify and is_address_book columns exist in contacts
+    try {
+        db.prepare('ALTER TABLE contacts ADD COLUMN notify TEXT').run();
+    } catch (e) {}
+    try {
+        db.prepare('ALTER TABLE contacts ADD COLUMN is_address_book INTEGER DEFAULT 0').run();
     } catch (e) {}
 }
 
@@ -73,8 +83,14 @@ initDb();
 function resolveLidToPhone(jid) {
     if (!jid) return '';
     const cleanJid = String(jid).replace(/^\+/, '');
-    const lidNum = cleanJid.split('@')[0].split(':')[0];
-    const mappingFile = path.join(dataDir, 'auth_info_wmk', `lid-mapping-${lidNum}_reverse.json`);
+    const idPart = cleanJid.split('@')[0].split(':')[0];
+
+    // If it's already a standard phone number (e.g. 62851... or 08...)
+    if (!cleanJid.includes('@lid') && idPart.startsWith('62')) {
+        return idPart;
+    }
+
+    const mappingFile = path.join(dataDir, 'auth_info_wmk', `lid-mapping-${idPart}_reverse.json`);
     try {
         if (fs.existsSync(mappingFile)) {
             const raw = fs.readFileSync(mappingFile, 'utf8');
@@ -82,7 +98,7 @@ function resolveLidToPhone(jid) {
             if (cleanPhone) return String(cleanPhone);
         }
     } catch (e) {}
-    return lidNum;
+    return idPart;
 }
 
 // Helper to format WhatsApp JID into clean readable phone number (+62 ...)
@@ -100,6 +116,87 @@ function formatJidToNumber(jid) {
     return `+${clean}`;
 }
 
+// Contact management helpers with Address Book priority
+function saveContact({ jid, name, notify, phoneNumber, isAddressBook = false }) {
+    if (!jid) return;
+    const cleanJid = String(jid).split(':')[0];
+    const isAddr = (isAddressBook || (name && cleanJid.endsWith('@s.whatsapp.net'))) ? 1 : 0;
+    const phone = phoneNumber || formatJidToNumber(cleanJid);
+    const phoneDigits = resolveLidToPhone(cleanJid);
+
+    const stmt = db.prepare(`
+        INSERT INTO contacts (jid, name, notify, phone_number, is_address_book, updated_at)
+        VALUES (@jid, @name, @notify, @phone, @isAddr, CURRENT_TIMESTAMP)
+        ON CONFLICT(jid) DO UPDATE SET
+            name = CASE 
+                WHEN @isAddr = 1 AND @name IS NOT NULL AND @name != '' THEN @name 
+                WHEN contacts.is_address_book = 1 THEN contacts.name 
+                WHEN @name IS NOT NULL AND @name != '' THEN @name 
+                ELSE contacts.name 
+            END,
+            notify = CASE 
+                WHEN @notify IS NOT NULL AND @notify != '' THEN @notify 
+                ELSE contacts.notify 
+            END,
+            phone_number = CASE 
+                WHEN @phone IS NOT NULL AND @phone != '' THEN @phone 
+                ELSE contacts.phone_number 
+            END,
+            is_address_book = CASE 
+                WHEN @isAddr = 1 THEN 1 
+                ELSE contacts.is_address_book 
+            END,
+            updated_at = CURRENT_TIMESTAMP
+    `);
+
+    stmt.run({
+        jid: cleanJid,
+        name: name || null,
+        notify: notify || null,
+        phone: phone || null,
+        isAddr
+    });
+
+    // Jika ini adalah nama buku telepon dari target, perbarui juga chats dan messages!
+    if (isAddr && name) {
+        try {
+            db.prepare(`
+                UPDATE chats 
+                SET name = ?, updated_at = CURRENT_TIMESTAMP 
+                WHERE (jid = ? OR phone_number = ? OR phone_number LIKE ?)
+            `).run(name, cleanJid, phone, `%${phoneDigits}%`);
+
+            db.prepare(`
+                UPDATE messages 
+                SET sender_name = ? 
+                WHERE (chat_jid = ? OR sender_jid = ? OR chat_jid LIKE ?) AND from_me = 0
+            `).run(name, cleanJid, cleanJid, `%${phoneDigits}%`);
+        } catch (e) {}
+    }
+}
+
+function getContactByJid(jid) {
+    if (!jid) return null;
+    const cleanJid = String(jid).split(':')[0];
+    const phoneDigits = resolveLidToPhone(cleanJid);
+    const phoneJid = `${phoneDigits}@s.whatsapp.net`;
+    const formattedPhone = formatJidToNumber(cleanJid);
+
+    // Prioritas 1: Kontak dari buku telepon target (@s.whatsapp.net) atau yang is_address_book = 1
+    let row = db.prepare(`
+        SELECT * FROM contacts 
+        WHERE (jid = ? OR jid = ? OR phone_number = ? OR phone_number LIKE ?)
+          AND name IS NOT NULL AND name != '' AND name != 'Tanpa Nama'
+        ORDER BY is_address_book DESC, (jid LIKE '%@s.whatsapp.net') DESC, updated_at DESC
+        LIMIT 1
+    `).get(phoneJid, cleanJid, formattedPhone, `%${phoneDigits}%`);
+
+    if (!row) {
+        row = db.prepare('SELECT * FROM contacts WHERE jid = ? OR jid = ?').get(cleanJid, phoneJid);
+    }
+    return row;
+}
+
 // Refresh and update any existing chats that stored raw LID numbers
 function refreshExistingChatNumbers() {
     try {
@@ -115,43 +212,65 @@ function refreshExistingChatNumbers() {
     }
 }
 
-refreshExistingChatNumbers();
-
-// Contact management helpers
-function saveContact({ jid, name, phoneNumber }) {
-    if (!jid || !name) return;
-    const phone = phoneNumber || formatJidToNumber(jid);
-    db.prepare(`
-        INSERT INTO contacts (jid, name, phone_number, updated_at)
-        VALUES (?, ?, ?, CURRENT_TIMESTAMP)
-        ON CONFLICT(jid) DO UPDATE SET
-            name = excluded.name,
-            phone_number = excluded.phone_number,
-            updated_at = CURRENT_TIMESTAMP
-    `).run(jid, name, phone);
-
-    // Otomatis perbarui nama chat jika kontak sudah tersimpan di buku telepon target
+// Refresh all chat names to ensure target's address book names always take precedence
+function refreshAllChatNames() {
     try {
-        db.prepare(`
-            UPDATE chats 
-            SET name = ?, updated_at = CURRENT_TIMESTAMP 
-            WHERE (jid = ? OR phone_number = ?) AND (name IS NULL OR name = '' OR name = 'Tanpa Nama' OR name != ?)
-        `).run(name, jid, phone, name);
-    } catch (e) {}
+        const chats = db.prepare('SELECT jid, name, phone_number, is_group FROM chats').all();
+        for (const chat of chats) {
+            if (chat.is_group) continue;
+            const contact = getContactByJid(chat.jid);
+            const bestName = contact?.name || contact?.notify;
+            if (bestName && bestName !== chat.name) {
+                db.prepare('UPDATE chats SET name = ?, updated_at = CURRENT_TIMESTAMP WHERE jid = ?').run(bestName, chat.jid);
+                db.prepare('UPDATE messages SET sender_name = ? WHERE chat_jid = ? AND from_me = 0').run(bestName, chat.jid);
+            }
+        }
+    } catch (e) {
+        console.error('Gagal menyegarkan nama chat:', e);
+    }
 }
 
-function getContactByJid(jid) {
-    if (!jid) return null;
+// Allow user to manually rename / customize a contact name in WMK
+function updateContactCustomName(jid, newName) {
+    if (!jid || !newName) return false;
     const cleanJid = String(jid).split(':')[0];
-    let row = db.prepare('SELECT * FROM contacts WHERE jid = ?').get(cleanJid);
-    if (!row) {
-        const resolved = resolveLidToPhone(jid);
-        if (resolved) {
-            row = db.prepare('SELECT * FROM contacts WHERE phone_number LIKE ? OR jid LIKE ?').get(`%${resolved}%`, `%${resolved}%`);
-        }
+    const phone = formatJidToNumber(cleanJid);
+    const phoneDigits = resolveLidToPhone(cleanJid);
+    const trimmed = newName.trim();
+
+    saveContact({
+        jid: cleanJid,
+        name: trimmed,
+        phoneNumber: phone,
+        isAddressBook: true
+    });
+
+    if (cleanJid.endsWith('@lid') && phoneDigits) {
+        saveContact({
+            jid: `${phoneDigits}@s.whatsapp.net`,
+            name: trimmed,
+            phoneNumber: phone,
+            isAddressBook: true
+        });
     }
-    return row;
+
+    db.prepare(`
+        UPDATE chats 
+        SET name = ?, updated_at = CURRENT_TIMESTAMP 
+        WHERE jid = ? OR phone_number = ? OR phone_number LIKE ?
+    `).run(trimmed, cleanJid, phone, `%${phoneDigits}%`);
+
+    db.prepare(`
+        UPDATE messages 
+        SET sender_name = ? 
+        WHERE (chat_jid = ? OR sender_jid = ? OR chat_jid LIKE ?) AND from_me = 0
+    `).run(trimmed, cleanJid, cleanJid, `%${phoneDigits}%`);
+
+    return true;
 }
+
+refreshExistingChatNumbers();
+refreshAllChatNames();
 
 // Save or update chat metadata
 function upsertChat({ jid, name, phoneNumber, lastMessage, lastMessageTime, isGroup, isDeleted = 0, isFromMe = 0 }) {
@@ -304,8 +423,11 @@ function getChats(query = '') {
     const chats = db.prepare(sql).all(...params);
     return chats.map(c => {
         const resolved = formatJidToNumber(c.jid);
+        const contact = getContactByJid(c.jid);
+        const bestName = (contact && contact.name) ? contact.name : c.name;
         return {
             ...c,
+            name: bestName,
             phone_number: (resolved && resolved !== c.phone_number) ? resolved : c.phone_number
         };
     });
@@ -316,8 +438,11 @@ function getChatByJid(jid) {
     const chat = db.prepare('SELECT * FROM chats WHERE jid = ?').get(jid);
     if (!chat) return null;
     const resolved = formatJidToNumber(chat.jid);
+    const contact = getContactByJid(chat.jid);
+    const bestName = (contact && contact.name) ? contact.name : chat.name;
     return {
         ...chat,
+        name: bestName,
         phone_number: (resolved && resolved !== chat.phone_number) ? resolved : chat.phone_number
     };
 }
@@ -341,7 +466,15 @@ function getMessagesForChat(chatJid, limit = 200) {
         ORDER BY timestamp ASC
         LIMIT ?
     `);
-    return stmt.all(chatJid, limit);
+    const messages = stmt.all(chatJid, limit);
+    return messages.map(m => {
+        if (m.from_me) return m;
+        const contact = getContactByJid(m.sender_jid) || getContactByJid(m.chat_jid);
+        return {
+            ...m,
+            sender_name: (contact && contact.name) ? contact.name : m.sender_name
+        };
+    });
 }
 
 // Focus Mode Settings
@@ -444,5 +577,7 @@ module.exports = {
     clearChatMessages,
     deleteMessageById,
     batchDeleteChats,
+    refreshAllChatNames,
+    updateContactCustomName,
     clearAllData
 };

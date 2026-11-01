@@ -143,6 +143,21 @@ app.post('/api/chats/batch-delete', (req, res) => {
     res.json({ success: true, count, message: `${count} chat berhasil dihapus` });
 });
 
+// 6c. Ubah / Sesuaikan Nama Kontak (Fitur Layer 1)
+app.post('/api/chats/:jid/update-name', (req, res) => {
+    const { name } = req.body;
+    if (!name || !name.trim()) {
+        return res.status(400).json({ success: false, message: 'Nama tidak boleh kosong' });
+    }
+    const success = db.updateContactCustomName(req.params.jid, name.trim());
+    if (success) {
+        io.emit('chats_updated');
+        res.json({ success: true, message: 'Nama kontak berhasil diperbarui' });
+    } else {
+        res.status(500).json({ success: false, message: 'Gagal memperbarui nama kontak' });
+    }
+});
+
 // 7. Delete single selected message (Fitur Layer 2)
 app.delete('/api/messages/:id', (req, res) => {
     const id = req.params.id;

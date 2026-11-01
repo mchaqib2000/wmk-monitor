@@ -230,6 +230,33 @@
                             <span id="focus-opt-desc" class="opt-sub-desc">Hanya menerima & memantau pesan dari nomor ini (nomor lain diabaikan)</span>
                         </div>
                     </button>
+
+                    <!-- Option 3: Sesuaikan / Edit Nama Kontak -->
+                    <button id="btn-edit-contact-name" class="setting-opt-item edit-name">
+                        <div class="opt-icon-circle edit-name">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M12 20h9"></path>
+                                <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
+                            </svg>
+                        </div>
+                        <div class="opt-details">
+                            <span class="opt-main-title">3. Ubah / Sesuaikan Nama Kontak</span>
+                            <span class="opt-sub-desc">Ganti nama kontak di monitor sesuai keinginan Anda</span>
+                        </div>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Edit Contact Name Modal -->
+        <div id="edit-name-modal" class="modal-overlay">
+            <div class="modal-box">
+                <h3>Ubah Nama Kontak</h3>
+                <p>Ubah nama kontak yang tampil di monitor:</p>
+                <input type="text" id="edit-contact-name-input" class="modal-input" placeholder="Masukkan nama kontak..." style="width: 100%; box-sizing: border-box; padding: 10px 14px; margin: 12px 0 16px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 15px; outline: none;">
+                <div class="modal-buttons">
+                    <button id="cancel-edit-name-btn" class="btn btn-secondary">Batal</button>
+                    <button id="confirm-edit-name-btn" class="btn btn-primary" style="background: #00a884; color: white;">Simpan Nama</button>
                 </div>
             </div>
         </div>

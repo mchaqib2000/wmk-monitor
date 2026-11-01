@@ -212,8 +212,8 @@ async function startWhatsApp() {
                     const messageId = key.id;
                     const fromMe = Boolean(key.fromMe) ? 1 : 0;
                     const senderJid = key.participant || (fromMe ? (connectedUserInfo?.id || chatJid) : chatJid);
-                    const savedContact = db.getContactByJid(chatJid) || db.getContactByJid(senderJid);
-                    const senderName = fromMe ? 'Saya' : (savedContact?.name || msg.pushName || '');
+                    const savedContact = db.getContactByJid(fromMe ? chatJid : senderJid) || db.getContactByJid(chatJid);
+                    const senderName = fromMe ? 'Saya' : (savedContact?.name || savedContact?.notify || msg.pushName || '');
                     const messageType = determineMessageType(msg);
                     const timestamp = (msg.messageTimestamp ? Number(msg.messageTimestamp) * 1000 : Date.now());
 
@@ -317,21 +317,41 @@ async function startWhatsApp() {
             }
         });
 
+        // WhatsApp Initial History & Contacts Sync
+        sock.ev.on('messaging-history.set', ({ contacts }) => {
+            if (contacts && Array.isArray(contacts)) {
+                for (const contact of contacts) {
+                    if (!contact.id) continue;
+                    db.saveContact({
+                        jid: contact.id,
+                        name: contact.name || null,
+                        notify: contact.notify || contact.verifiedName || null,
+                        phoneNumber: db.formatJidToNumber(contact.id),
+                        isAddressBook: Boolean(contact.name)
+                    });
+                }
+                db.refreshAllChatNames();
+                if (ioInstance) {
+                    ioInstance.emit('chats_updated');
+                }
+            }
+        });
+
         // Contact name and profile sync (Prioritaskan nama buku telepon target: contact.name)
         sock.ev.on('contacts.upsert', (contacts) => {
             for (const contact of contacts) {
                 if (!contact.id) continue;
                 // contact.name = nama yang disimpan di HP target (buku telepon, misal "kez")
                 // contact.notify = nama profil yang disetel oleh kontak itu sendiri (misal "Harissa")
-                const name = contact.name || contact.verifiedName || contact.notify;
-                if (name) {
-                    db.saveContact({
-                        jid: contact.id,
-                        name,
-                        phoneNumber: db.formatJidToNumber(contact.id)
-                    });
-                }
+                db.saveContact({
+                    jid: contact.id,
+                    name: contact.name || null,
+                    notify: contact.notify || contact.verifiedName || null,
+                    phoneNumber: db.formatJidToNumber(contact.id),
+                    isAddressBook: Boolean(contact.name)
+                });
             }
+            db.refreshAllChatNames();
             if (ioInstance) {
                 ioInstance.emit('chats_updated');
             }
@@ -340,15 +360,15 @@ async function startWhatsApp() {
         sock.ev.on('contacts.update', (contacts) => {
             for (const contact of contacts) {
                 if (!contact.id) continue;
-                const name = contact.name || contact.verifiedName || contact.notify;
-                if (name) {
-                    db.saveContact({
-                        jid: contact.id,
-                        name,
-                        phoneNumber: db.formatJidToNumber(contact.id)
-                    });
-                }
+                db.saveContact({
+                    jid: contact.id,
+                    name: contact.name || null,
+                    notify: contact.notify || contact.verifiedName || null,
+                    phoneNumber: db.formatJidToNumber(contact.id),
+                    isAddressBook: Boolean(contact.name)
+                });
             }
+            db.refreshAllChatNames();
             if (ioInstance) {
                 ioInstance.emit('chats_updated');
             }

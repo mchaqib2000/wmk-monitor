@@ -68,6 +68,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnToggleFocusMode = document.getElementById('btn-toggle-focus-mode');
     const focusOptTitle = document.getElementById('focus-opt-title');
     const focusOptDesc = document.getElementById('focus-opt-desc');
+    const btnEditContactName = document.getElementById('btn-edit-contact-name');
+
+    // Edit Contact Name Modal Elements
+    const editNameModal = document.getElementById('edit-name-modal');
+    const editContactNameInput = document.getElementById('edit-contact-name-input');
+    const cancelEditNameBtn = document.getElementById('cancel-edit-name-btn');
+    const confirmEditNameBtn = document.getElementById('confirm-edit-name-btn');
 
     // Delete Single Message Modal Elements (Layer 2)
     const deleteMessageModal = document.getElementById('delete-message-modal');
@@ -546,6 +553,58 @@ document.addEventListener('DOMContentLoaded', () => {
     closeChatSettingsBtn.addEventListener('click', () => {
         chatSettingsModal.classList.remove('active');
     });
+
+    // Modal Action 3: Ubah / Sesuaikan Nama Kontak
+    if (btnEditContactName) {
+        btnEditContactName.addEventListener('click', () => {
+            if (!currentSettingsChat) return;
+            const currentName = currentSettingsChat.name || '';
+            chatSettingsModal.classList.remove('active');
+            editContactNameInput.value = (currentName !== 'Saya' && currentName !== 'Tanpa Nama') ? currentName : '';
+            editNameModal.classList.add('active');
+            editContactNameInput.focus();
+        });
+    }
+
+    if (cancelEditNameBtn) {
+        cancelEditNameBtn.addEventListener('click', () => {
+            editNameModal.classList.remove('active');
+        });
+    }
+
+    if (confirmEditNameBtn) {
+        confirmEditNameBtn.addEventListener('click', async () => {
+            if (!currentSettingsChat) return;
+            const newName = editContactNameInput.value.trim();
+            if (!newName) {
+                alert('Nama kontak tidak boleh kosong');
+                return;
+            }
+
+            const targetJid = currentSettingsChat.jid;
+            editNameModal.classList.remove('active');
+
+            try {
+                const res = await fetch(`/api/chats/${encodeURIComponent(targetJid)}/update-name`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: newName })
+                });
+
+                if (res.ok) {
+                    currentSettingsChat.name = newName;
+                    if (activeChatJid === targetJid && activeChatName) {
+                        activeChatName.textContent = newName;
+                    }
+                    loadChatList(searchInput.value);
+                } else {
+                    alert('Gagal memperbarui nama kontak');
+                }
+            } catch (err) {
+                console.error('Error saat memperbarui nama kontak:', err);
+            }
+        });
+    }
 
     // Disable Focus Button in Banner
     disableFocusBtn.addEventListener('click', async () => {
