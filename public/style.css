@@ -100,14 +100,7 @@ body {
 }
 
 .status-dot {
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    background-color: #999;
-}
-.status-dot.online {
-    background-color: #25D366;
-    box-shadow: 0 0 6px #25D366;
+    display: none; /* Disembunyikan agar tampilan bersih dan tidak mencolok */
 }
 
 .header-actions {

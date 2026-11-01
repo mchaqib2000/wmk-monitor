@@ -88,7 +88,8 @@ async function startWhatsApp() {
             auth: state,
             browser: Browsers.ubuntu('Chrome'), // Shows up as Ubuntu / Chrome in Linked Devices
             syncFullHistory: true, // Syncs previous messages for backup
-            generateHighQualityLinkPreview: false
+            generateHighQualityLinkPreview: false,
+            markOnlineOnConnect: false // Jangan pernah kirim status online saat terhubung (Ghost/Stealth Mode)
         });
 
         sock.ev.on('creds.update', saveCreds);
@@ -137,6 +138,15 @@ async function startWhatsApp() {
                     phone: db.formatJidToNumber(user?.id)
                 };
                 console.log('[WMK] Terhubung ke WhatsApp Target:', connectedUserInfo);
+
+                // Set status presence ke 'unavailable' agar target tidak kelihatan online terus di WhatsApp
+                try {
+                    await sock.sendPresenceUpdate('unavailable');
+                    console.log('[WMK] Status presence disetel ke: unavailable (Offline/Tersembunyi)');
+                } catch (err) {
+                    console.error('[WMK] Gagal menyetel presence:', err);
+                }
+
                 notifyState('connected');
             }
         });
