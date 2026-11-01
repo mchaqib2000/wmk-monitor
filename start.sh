@@ -9,4 +9,4 @@ echo "Server berjalan di HP Anda."
 echo "Buka Google Chrome di HP ini: http://localhost:3000"
 echo "--------------------------------------------------------"
 
-node server/index.js
+node --experimental-sqlite server/index.js 2>/dev/null || node server/index.js
