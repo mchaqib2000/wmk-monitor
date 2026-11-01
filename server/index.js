@@ -86,7 +86,65 @@ app.get('/api/chats/:jid/messages', (req, res) => {
     res.json({ success: true, messages });
 });
 
-// 5. Unlink / Logout
+// 5. Focus Mode Endpoints
+app.get('/api/focus', (req, res) => {
+    const focusJid = db.getFocusJid();
+    let focusChat = null;
+    if (focusJid) {
+        focusChat = db.getChatByJid(focusJid);
+    }
+    res.json({
+        active: !!focusJid,
+        focusJid,
+        focusChat
+    });
+});
+
+app.post('/api/focus/toggle', (req, res) => {
+    const { jid } = req.body;
+    const current = db.getFocusJid();
+    let newFocus = null;
+    if (current === jid) {
+        db.clearFocusJid();
+    } else {
+        newFocus = db.setFocusJid(jid);
+    }
+    const focusChat = newFocus ? db.getChatByJid(newFocus) : null;
+    io.emit('focus_mode_changed', {
+        active: !!newFocus,
+        focusJid: newFocus,
+        focusChat
+    });
+    res.json({ success: true, active: !!newFocus, focusJid: newFocus, focusChat });
+});
+
+app.post('/api/focus/clear', (req, res) => {
+    db.clearFocusJid();
+    io.emit('focus_mode_changed', { active: false, focusJid: null, focusChat: null });
+    res.json({ success: true, active: false });
+});
+
+// 6. Clear all messages for a specific chat (Fitur Layer 1)
+app.post('/api/chats/:jid/clear-messages', (req, res) => {
+    const jid = req.params.jid;
+    db.clearChatMessages(jid);
+    io.emit('chat_messages_cleared', { chatJid: jid });
+    res.json({ success: true, message: 'Semua pesan di chat ini berhasil dihapus' });
+});
+
+// 7. Delete single selected message (Fitur Layer 2)
+app.delete('/api/messages/:id', (req, res) => {
+    const id = req.params.id;
+    const success = db.deleteMessageById(id);
+    if (success) {
+        io.emit('message_deleted_permanently', { messageId: id });
+        res.json({ success: true, message: 'Pesan berhasil dihapus' });
+    } else {
+        res.status(404).json({ success: false, message: 'Pesan tidak ditemukan' });
+    }
+});
+
+// 8. Unlink / Logout
 app.post('/api/logout', async (req, res) => {
     try {
         await whatsapp.logout();

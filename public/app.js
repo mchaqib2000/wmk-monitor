@@ -5,6 +5,9 @@ document.addEventListener('DOMContentLoaded', () => {
     let activeChatJid = null;
     let deferredPrompt = null;
     let searchTimeout = null;
+    let activeFocusJid = null;
+    let currentSettingsChat = null;
+    let pendingDeleteMsgId = null;
 
     // DOM Elements
     const screenQr = document.getElementById('screen-qr');
@@ -31,6 +34,27 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const installBanner = document.getElementById('install-banner');
     const installPwaBtn = document.getElementById('install-pwa-btn');
+
+    // Focus Mode Elements (Layer 1)
+    const focusBanner = document.getElementById('focus-banner');
+    const focusBannerName = document.getElementById('focus-banner-name');
+    const disableFocusBtn = document.getElementById('disable-focus-btn');
+
+    // Chat Settings Modal Elements (Layer 1)
+    const chatSettingsModal = document.getElementById('chat-settings-modal');
+    const settingsModalAvatar = document.getElementById('settings-modal-avatar');
+    const settingsModalName = document.getElementById('settings-modal-name');
+    const settingsModalPhone = document.getElementById('settings-modal-phone');
+    const closeChatSettingsBtn = document.getElementById('close-chat-settings-btn');
+    const btnClearChatMessages = document.getElementById('btn-clear-chat-messages');
+    const btnToggleFocusMode = document.getElementById('btn-toggle-focus-mode');
+    const focusOptTitle = document.getElementById('focus-opt-title');
+    const focusOptDesc = document.getElementById('focus-opt-desc');
+
+    // Delete Single Message Modal Elements (Layer 2)
+    const deleteMessageModal = document.getElementById('delete-message-modal');
+    const cancelDeleteMsgBtn = document.getElementById('cancel-delete-msg-btn');
+    const confirmDeleteMsgBtn = document.getElementById('confirm-delete-msg-btn');
 
     // Register Service Worker for PWA
     if ('serviceWorker' in navigator) {
@@ -153,6 +177,47 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    // Helper to update Focus Banner
+    function updateFocusBanner(data) {
+        if (data && data.active && data.focusJid) {
+            activeFocusJid = data.focusJid;
+            const chat = data.focusChat;
+            const displayName = chat ? (chat.name || formatDisplayNumber(chat.phone_number, chat.jid)) : data.focusJid;
+            focusBannerName.textContent = displayName;
+            focusBanner.style.display = 'flex';
+        } else {
+            activeFocusJid = null;
+            focusBanner.style.display = 'none';
+        }
+    }
+
+    // Realtime Focus Mode changed event
+    socket.on('focus_mode_changed', (data) => {
+        updateFocusBanner(data);
+        loadChatList(searchInput.value);
+    });
+
+    // Realtime Chat messages cleared event
+    socket.on('chat_messages_cleared', (data) => {
+        if (activeChatJid === data.chatJid) {
+            messagesContainer.innerHTML = `
+                <div style="text-align: center; padding: 40px 20px; color: #667781; font-size: 13px;">
+                    Belum ada pesan yang tersimpan di chat ini.
+                </div>
+            `;
+        }
+        loadChatList(searchInput.value);
+    });
+
+    // Realtime message deleted permanently event
+    socket.on('message_deleted_permanently', (data) => {
+        const bubbleEl = document.querySelector(`[data-msg-id="${data.messageId}"]`);
+        if (bubbleEl) {
+            bubbleEl.remove();
+        }
+        loadChatList(searchInput.value);
+    });
+
     // Formatting helpers
     function formatTime(timestamp) {
         if (!timestamp) return '';
@@ -249,15 +314,17 @@ document.addEventListener('DOMContentLoaded', () => {
             const initials = getInitials(chat.name || displayPhone);
             const isGroup = chat.is_group === 1;
             const timeStr = formatTime(chat.last_message_time);
+            const isFocused = activeFocusJid && (chat.jid === activeFocusJid);
+            const focusPillHtml = isFocused ? `<span class="chat-focus-pill">🎯 Fokus</span>` : '';
 
-            // Layer 1: Teks pesan bersih 1 baris (tanda dot merah & tag terhapus dihilangkan di Layer 1)
+            // Layer 1: Teks pesan bersih 1 baris
             const previewText = chat.last_message || 'Belum ada pesan';
 
             item.innerHTML = `
                 <div class="chat-avatar ${isGroup ? 'group' : ''}">${initials}</div>
                 <div class="chat-info">
                     <div class="chat-top-row">
-                        <span class="chat-name">${escapeHtml(chat.name || displayPhone)}</span>
+                        <span class="chat-name">${escapeHtml(chat.name || displayPhone)}${focusPillHtml}</span>
                         <span class="chat-time">${timeStr}</span>
                     </div>
                     <div class="chat-phone">${escapeHtml(displayPhone)}</div>
@@ -267,8 +334,23 @@ document.addEventListener('DOMContentLoaded', () => {
                         </span>
                     </div>
                 </div>
+                <button class="chat-item-menu-btn" title="Pengaturan Chat">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="1.5"></circle>
+                        <circle cx="12" cy="5" r="1.5"></circle>
+                        <circle cx="12" cy="19" r="1.5"></circle>
+                    </svg>
+                </button>
             `;
 
+            // Tapping 3-dots button triggers settings modal (Layer 1)
+            const menuBtnEl = item.querySelector('.chat-item-menu-btn');
+            menuBtnEl.addEventListener('click', (e) => {
+                e.stopPropagation();
+                openChatSettings(chat);
+            });
+
+            // Tapping item opens the chat view
             item.addEventListener('click', () => {
                 openChat(chat);
             });
@@ -276,6 +358,81 @@ document.addEventListener('DOMContentLoaded', () => {
             chatListContainer.appendChild(item);
         });
     }
+
+    // Open Chat Settings Modal (Layer 1)
+    function openChatSettings(chat) {
+        currentSettingsChat = chat;
+        const displayPhone = formatDisplayNumber(chat.phone_number, chat.jid);
+        settingsModalName.textContent = chat.name || displayPhone;
+        settingsModalPhone.textContent = displayPhone;
+        settingsModalAvatar.textContent = getInitials(chat.name || displayPhone);
+        if (chat.is_group) settingsModalAvatar.classList.add('group');
+        else settingsModalAvatar.classList.remove('group');
+
+        // Check if this chat is currently focused
+        const isCurrentFocused = (activeFocusJid && activeFocusJid === chat.jid);
+        if (isCurrentFocused) {
+            focusOptTitle.textContent = '2. Matikan Mode Fokus';
+            focusOptDesc.textContent = 'Mode fokus sedang aktif pada nomor ini. Ketuk untuk memantau semua nomor kembali.';
+        } else {
+            focusOptTitle.textContent = '2. Aktifkan Mode Fokus';
+            focusOptDesc.textContent = 'Hanya menerima & memantau pesan dari nomor ini (nomor lain diabaikan)';
+        }
+
+        chatSettingsModal.classList.add('active');
+    }
+
+    // Modal Action 1: Hapus Semua Pesan di Chat Ini
+    btnClearChatMessages.addEventListener('click', async () => {
+        if (!currentSettingsChat) return;
+        const targetName = currentSettingsChat.name || formatDisplayNumber(currentSettingsChat.phone_number, currentSettingsChat.jid);
+        if (!confirm(`Hapus semua riwayat pesan tersimpan dari "${targetName}"?`)) {
+            return;
+        }
+
+        chatSettingsModal.classList.remove('active');
+        try {
+            await fetch(`/api/chats/${encodeURIComponent(currentSettingsChat.jid)}/clear-messages`, { method: 'POST' });
+            loadChatList(searchInput.value);
+        } catch (e) {
+            console.error('Gagal menghapus pesan chat:', e);
+        }
+    });
+
+    // Modal Action 2: Toggle Mode Fokus
+    btnToggleFocusMode.addEventListener('click', async () => {
+        if (!currentSettingsChat) return;
+        chatSettingsModal.classList.remove('active');
+        try {
+            const res = await fetch('/api/focus/toggle', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ jid: currentSettingsChat.jid })
+            });
+            const data = await res.json();
+            updateFocusBanner(data);
+            loadChatList(searchInput.value);
+        } catch (e) {
+            console.error('Gagal mengubah mode fokus:', e);
+        }
+    });
+
+    // Close Chat Settings Modal
+    closeChatSettingsBtn.addEventListener('click', () => {
+        chatSettingsModal.classList.remove('active');
+    });
+
+    // Disable Focus Button in Banner
+    disableFocusBtn.addEventListener('click', async () => {
+        try {
+            const res = await fetch('/api/focus/clear', { method: 'POST' });
+            const data = await res.json();
+            updateFocusBanner(data);
+            loadChatList(searchInput.value);
+        } catch (e) {
+            console.error('Gagal mematikan mode fokus:', e);
+        }
+    });
 
     // Open Chat View (Requirement 4: tampilan chat sederhana)
     async function openChat(chat) {
@@ -371,7 +528,18 @@ document.addEventListener('DOMContentLoaded', () => {
             `;
         }
 
+        // Layer 2: Tombol hapus pesan terpilih
+        const deleteBtnHtml = `
+            <button class="msg-delete-btn" data-msg-id="${msg.id}" title="Hapus pesan terpilih">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="3 6 5 6 21 6"></polyline>
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                </svg>
+            </button>
+        `;
+
         bubble.innerHTML = `
+            ${deleteBtnHtml}
             ${senderHtml}
             ${deletedBannerHtml}
             <div class="msg-text">${escapeHtml(msg.text)}</div>
@@ -384,6 +552,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 ` : ''}
             </div>
         `;
+
+        // Event listener for Layer 2 delete single message button
+        const delBtn = bubble.querySelector('.msg-delete-btn');
+        if (delBtn) {
+            delBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                pendingDeleteMsgId = msg.id;
+                deleteMessageModal.classList.add('active');
+            });
+        }
 
         messagesContainer.appendChild(bubble);
     }
@@ -433,6 +611,29 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    // Layer 2: Delete Selected Message Modal Handlers
+    cancelDeleteMsgBtn.addEventListener('click', () => {
+        pendingDeleteMsgId = null;
+        deleteMessageModal.classList.remove('active');
+    });
+
+    confirmDeleteMsgBtn.addEventListener('click', async () => {
+        if (!pendingDeleteMsgId) return;
+        const msgId = pendingDeleteMsgId;
+        deleteMessageModal.classList.remove('active');
+        try {
+            await fetch(`/api/messages/${encodeURIComponent(msgId)}`, { method: 'DELETE' });
+            const bubbleEl = document.querySelector(`[data-msg-id="${msgId}"]`);
+            if (bubbleEl) {
+                bubbleEl.remove();
+            }
+            loadChatList(searchInput.value);
+        } catch (e) {
+            console.error('Gagal menghapus pesan terpilih:', e);
+        }
+        pendingDeleteMsgId = null;
+    });
+
     // Utility: HTML Escaping
     function escapeHtml(str) {
         if (!str) return '';
@@ -452,6 +653,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 targetPhoneLabel.textContent = data.user?.phone || data.user?.name || 'Terhubung';
                 showScreen('screen-chat-list');
                 loadChatList();
+                // Check initial focus mode
+                fetch('/api/focus')
+                    .then(r => r.json())
+                    .then(fData => updateFocusBanner(fData))
+                    .catch(e => console.error(e));
             } else if (data.state === 'qr_ready' && data.qr) {
                 qrImage.src = data.qr;
                 qrImage.style.display = 'block';

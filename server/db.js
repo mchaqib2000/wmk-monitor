@@ -47,6 +47,11 @@ function initDb() {
         CREATE INDEX IF NOT EXISTS idx_messages_chat_time ON messages(chat_jid, timestamp);
         CREATE INDEX IF NOT EXISTS idx_messages_deleted ON messages(is_deleted);
         CREATE INDEX IF NOT EXISTS idx_chats_last_time ON chats(last_message_time DESC);
+
+        CREATE TABLE IF NOT EXISTS settings (
+            key TEXT PRIMARY KEY,
+            value TEXT
+        );
     `);
 }
 
@@ -248,11 +253,75 @@ function getMessagesForChat(chatJid, limit = 200) {
     return stmt.all(chatJid, limit);
 }
 
+// Focus Mode Settings
+function getFocusJid() {
+    const row = db.prepare('SELECT value FROM settings WHERE key = ?').get('focus_chat_jid');
+    return row ? row.value : null;
+}
+
+function setFocusJid(jid) {
+    db.prepare(`
+        INSERT INTO settings (key, value) VALUES ('focus_chat_jid', ?)
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value
+    `).run(jid);
+    return jid;
+}
+
+function clearFocusJid() {
+    db.prepare("DELETE FROM settings WHERE key = 'focus_chat_jid'").run();
+    return null;
+}
+
+// Clear all messages for a specific chat (Fitur Layer 1)
+function clearChatMessages(chatJid) {
+    db.prepare('DELETE FROM messages WHERE chat_jid = ?').run(chatJid);
+    db.prepare(`
+        UPDATE chats 
+        SET last_message = '', last_message_deleted = 0 
+        WHERE jid = ?
+    `).run(chatJid);
+    return true;
+}
+
+// Delete single selected message (Fitur Layer 2)
+function deleteMessageById(messageId) {
+    const msg = db.prepare('SELECT chat_jid FROM messages WHERE id = ?').get(messageId);
+    if (!msg) return false;
+
+    db.prepare('DELETE FROM messages WHERE id = ?').run(messageId);
+
+    // Refresh last message of the chat
+    const latest = db.prepare(`
+        SELECT text, timestamp, is_deleted 
+        FROM messages 
+        WHERE chat_jid = ? 
+        ORDER BY timestamp DESC 
+        LIMIT 1
+    `).get(msg.chat_jid);
+
+    if (latest) {
+        db.prepare(`
+            UPDATE chats 
+            SET last_message = ?, last_message_time = ?, last_message_deleted = ? 
+            WHERE jid = ?
+        `).run(latest.text, latest.timestamp, latest.is_deleted, msg.chat_jid);
+    } else {
+        db.prepare(`
+            UPDATE chats 
+            SET last_message = '', last_message_deleted = 0 
+            WHERE jid = ?
+        `).run(msg.chat_jid);
+    }
+
+    return true;
+}
+
 // Reset data (optional admin action)
 function clearAllData() {
     db.exec(`
         DELETE FROM messages;
         DELETE FROM chats;
+        DELETE FROM settings;
     `);
 }
 
@@ -265,5 +334,10 @@ module.exports = {
     getChatByJid,
     getMessagesForChat,
     formatJidToNumber,
+    getFocusJid,
+    setFocusJid,
+    clearFocusJid,
+    clearChatMessages,
+    deleteMessageById,
     clearAllData
 };

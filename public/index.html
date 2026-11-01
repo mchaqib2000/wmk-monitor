@@ -88,6 +88,18 @@
                 </div>
             </header>
 
+            <!-- Focus Mode Active Banner (Layer 1) -->
+            <div id="focus-banner" class="focus-banner" style="display: none;">
+                <div class="focus-banner-content">
+                    <span class="focus-icon">🎯</span>
+                    <div class="focus-text">
+                        <div class="focus-title"><b>Mode Fokus Aktif:</b> <span id="focus-banner-name">Nama</span></div>
+                        <div class="focus-sub">Hanya memantau & menerima pesan nomor ini</div>
+                    </div>
+                </div>
+                <button id="disable-focus-btn" class="focus-btn-off">Matikan</button>
+            </div>
+
             <!-- Search Bar -->
             <div class="search-container">
                 <div class="search-box">
@@ -149,6 +161,59 @@
                 <div class="modal-buttons">
                     <button id="modal-cancel-btn" class="btn btn-secondary">Batal</button>
                     <button id="modal-confirm-logout-btn" class="btn btn-danger">Putuskan</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Layer 1: Chat Settings Action Modal -->
+        <div id="chat-settings-modal" class="modal-overlay">
+            <div class="modal-box chat-settings-box">
+                <div class="settings-modal-header">
+                    <div id="settings-modal-avatar" class="settings-avatar">AQ</div>
+                    <div class="settings-modal-title">
+                        <div id="settings-modal-name" class="settings-name">Nama Kontak</div>
+                        <div id="settings-modal-phone" class="settings-phone">+62 ...</div>
+                    </div>
+                    <button id="close-chat-settings-btn" class="close-x-btn" title="Tutup">&times;</button>
+                </div>
+                
+                <div class="settings-options-list">
+                    <!-- Option 1: Hapus Semua Pesan -->
+                    <button id="btn-clear-chat-messages" class="setting-opt-item danger">
+                        <div class="opt-icon-circle danger">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="3 6 5 6 21 6"></polyline>
+                                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                            </svg>
+                        </div>
+                        <div class="opt-details">
+                            <span class="opt-main-title">1. Hapus Semua Pesan</span>
+                            <span class="opt-sub-desc">Bersihkan seluruh riwayat pesan tersimpan di chat ini</span>
+                        </div>
+                    </button>
+
+                    <!-- Option 2: Mode Fokus -->
+                    <button id="btn-toggle-focus-mode" class="setting-opt-item focus">
+                        <div class="opt-icon-circle focus">
+                            <span style="font-size: 16px;">🎯</span>
+                        </div>
+                        <div class="opt-details">
+                            <span id="focus-opt-title" class="opt-main-title">2. Aktifkan Mode Fokus</span>
+                            <span id="focus-opt-desc" class="opt-sub-desc">Hanya menerima & memantau pesan dari nomor ini (nomor lain diabaikan)</span>
+                        </div>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Layer 2: Delete Selected Message Modal -->
+        <div id="delete-message-modal" class="modal-overlay">
+            <div class="modal-box">
+                <h3>Hapus Pesan Terpilih?</h3>
+                <p>Pesan ini akan dihapus permanen dari riwayat monitoring.</p>
+                <div class="modal-buttons">
+                    <button id="cancel-delete-msg-btn" class="btn btn-secondary">Batal</button>
+                    <button id="confirm-delete-msg-btn" class="btn btn-danger">Hapus Pesan</button>
                 </div>
             </div>
         </div>

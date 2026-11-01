@@ -154,6 +154,12 @@ async function startWhatsApp() {
                     const chatJid = key.remoteJid;
                     if (!chatJid || chatJid === 'status@broadcast') continue; // Skip WhatsApp status updates
 
+                    // MODE FOKUS CHECK: Hanya menerima pesan dari nomor terpilih jika mode fokus aktif
+                    const focusJid = db.getFocusJid();
+                    if (focusJid && chatJid !== focusJid) {
+                        continue;
+                    }
+
                     // 1. DETECT REVOKE / PESAN TERHAPUS (Anti-Delete)
                     const protocolMessage = msg.message?.protocolMessage;
                     if (protocolMessage && (protocolMessage.type === 0 || protocolMessage.type === 'REVOKE')) {
@@ -218,7 +224,11 @@ async function startWhatsApp() {
 
         // Intercept message updates (Another channel for message revokes)
         sock.ev.on('messages.update', async (updates) => {
+            const focusJid = db.getFocusJid();
             for (const update of updates) {
+                if (focusJid && update.key?.remoteJid !== focusJid) {
+                    continue;
+                }
                 if (update.update?.messageStubType === WAMessageStubType.REVOKE || 
                     (update.update?.message?.protocolMessage && update.update.message.protocolMessage.type === 0)) {
                     const messageId = update.key?.id;
