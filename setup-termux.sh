@@ -15,11 +15,14 @@ pkg update -y && pkg upgrade -y
 
 # 2. Install Node.js dan dependensi compiler
 echo "[2/4] Menginstall Node.js, Python, Git & Compiler..."
-pkg install -y nodejs-lts git python make clang build-essential
+pkg install -y nodejs git python make clang pkg-config
 
 # 3. Masuk ke direktori dan install modul
 echo "[3/4] Mengunduh modul dependensi WhatsApp..."
+export CFLAGS="-I$PREFIX/include/node"
+export CXXFLAGS="-I$PREFIX/include/node"
 npm install
+npm rebuild better-sqlite3 --build-from-source 2>/dev/null || true
 
 # 4. Berikan izin eksekusi script start
 chmod +x start.sh 2>/dev/null || true

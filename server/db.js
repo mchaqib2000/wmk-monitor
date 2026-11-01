@@ -1,4 +1,3 @@
-const Database = require('better-sqlite3');
 const path = require('path');
 const fs = require('fs');
 
@@ -8,10 +7,29 @@ if (!fs.existsSync(dataDir)) {
 }
 
 const dbPath = path.join(dataDir, 'wmk_monitor.db');
-const db = new Database(dbPath);
 
-// Enable WAL mode for high performance & concurrency
-db.pragma('journal_mode = WAL');
+// Multi-driver SQLite initialization (supports better-sqlite3 and native node:sqlite for Termux/Android)
+let db;
+try {
+    const Database = require('better-sqlite3');
+    db = new Database(dbPath);
+    if (typeof db.pragma === 'function') {
+        db.pragma('journal_mode = WAL');
+    } else {
+        db.exec('PRAGMA journal_mode = WAL');
+    }
+} catch (err1) {
+    try {
+        const { DatabaseSync } = require('node:sqlite');
+        db = new DatabaseSync(dbPath);
+        db.exec('PRAGMA journal_mode = WAL');
+        db.pragma = (str) => db.exec(`PRAGMA ${str}`);
+        console.log('[WMK] Menggunakan driver SQLite bawaan Node.js (node:sqlite)');
+    } catch (err2) {
+        console.error('[WMK] Error memuat SQLite driver:', err1.message);
+        throw err1;
+    }
+}
 
 // Initialize database schema
 function initDb() {
@@ -541,13 +559,25 @@ function batchDeleteChats(jids) {
     if (!Array.isArray(jids) || jids.length === 0) return 0;
     const placeholders = jids.map(() => '?').join(',');
     
-    const tx = db.transaction((targets) => {
-        db.prepare(`DELETE FROM messages WHERE chat_jid IN (${placeholders})`).run(...targets);
-        const info = db.prepare(`DELETE FROM chats WHERE jid IN (${placeholders})`).run(...targets);
-        return info.changes;
-    });
-
-    return tx(jids);
+    if (typeof db.transaction === 'function') {
+        const tx = db.transaction((targets) => {
+            db.prepare(`DELETE FROM messages WHERE chat_jid IN (${placeholders})`).run(...targets);
+            const info = db.prepare(`DELETE FROM chats WHERE jid IN (${placeholders})`).run(...targets);
+            return info.changes;
+        });
+        return tx(jids);
+    } else {
+        db.exec('BEGIN');
+        try {
+            db.prepare(`DELETE FROM messages WHERE chat_jid IN (${placeholders})`).run(...jids);
+            const info = db.prepare(`DELETE FROM chats WHERE jid IN (${placeholders})`).run(...jids);
+            db.exec('COMMIT');
+            return info.changes;
+        } catch (e) {
+            db.exec('ROLLBACK');
+            throw e;
+        }
+    }
 }
 
 // Reset data (optional admin action)
