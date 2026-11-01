@@ -249,14 +249,9 @@ document.addEventListener('DOMContentLoaded', () => {
             const initials = getInitials(chat.name || displayPhone);
             const isGroup = chat.is_group === 1;
             const timeStr = formatTime(chat.last_message_time);
-            const hasDeleted = chat.last_message_deleted === 1;
-            const deletedCount = chat.deleted_messages_count || 0;
 
-            // Single line preview formatting
-            let previewText = chat.last_message || 'Belum ada pesan';
-            if (hasDeleted) {
-                previewText = `🔴 [Pesan Terhapus] ${chat.last_message}`;
-            }
+            // Layer 1: Teks pesan bersih 1 baris (tanda dot merah & tag terhapus dihilangkan di Layer 1)
+            const previewText = chat.last_message || 'Belum ada pesan';
 
             item.innerHTML = `
                 <div class="chat-avatar ${isGroup ? 'group' : ''}">${initials}</div>
@@ -267,14 +262,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     </div>
                     <div class="chat-phone">${escapeHtml(displayPhone)}</div>
                     <div class="chat-preview-row">
-                        <span class="chat-preview ${hasDeleted ? 'has-deleted' : ''}">
+                        <span class="chat-preview">
                             ${escapeHtml(previewText)}
                         </span>
-                        ${deletedCount > 0 ? `
-                            <span class="deleted-badge" title="${deletedCount} pesan terhapus di chat ini">
-                                <span class="dot-red"></span> ${deletedCount} terhapus
-                            </span>
-                        ` : ''}
                     </div>
                 </div>
             `;
