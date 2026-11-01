@@ -168,10 +168,13 @@ document.addEventListener('DOMContentLoaded', () => {
             appendMessage(msg);
             scrollMessagesToBottom();
         }
-        // Refresh chat list preview if on chat list screen
-        if (currentScreen === 'screen-chat-list') {
-            loadChatList(searchInput.value);
-        }
+        // Always refresh chat list preview so new chat (incoming or outgoing) immediately appears on Layer 1!
+        loadChatList(searchInput.value);
+    });
+
+    // Realtime chats updated event
+    socket.on('chats_updated', () => {
+        loadChatList(searchInput.value);
     });
 
     // Realtime message deleted event (ANTI-DELETE FEATURE)
@@ -354,14 +357,17 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             const displayPhone = formatDisplayNumber(chat.phone_number, chat.jid);
-            const initials = getInitials(chat.name || displayPhone);
+            const contactDisplayName = (chat.name && chat.name !== 'Saya') ? chat.name : displayPhone;
+            const initials = getInitials(contactDisplayName);
             const isGroup = chat.is_group === 1;
             const timeStr = formatTime(chat.last_message_time);
             const isFocused = activeFocusJid && (chat.jid === activeFocusJid);
             const focusPillHtml = isFocused ? `<span class="chat-focus-pill">🎯 Fokus</span>` : '';
 
-            // Layer 1: Teks pesan bersih 1 baris
-            const previewText = chat.last_message || 'Belum ada pesan';
+            // Layer 1: Teks pesan bersih 1 baris (dengan ikon centang jika pesan keluar dari target)
+            const isLastFromMe = Boolean(chat.last_message_from_me === 1 || chat.last_message_from_me === true);
+            const checkPrefix = isLastFromMe ? '<span class="preview-check-icon">✓</span> ' : '';
+            const previewText = chat.last_message ? `${checkPrefix}${escapeHtml(chat.last_message)}` : 'Belum ada pesan';
 
             item.innerHTML = `
                 <div class="chat-batch-checkbox">
@@ -372,13 +378,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 <div class="chat-avatar ${isGroup ? 'group' : ''}">${initials}</div>
                 <div class="chat-info">
                     <div class="chat-top-row">
-                        <span class="chat-name">${escapeHtml(chat.name || displayPhone)}${focusPillHtml}</span>
+                        <span class="chat-name">${escapeHtml(contactDisplayName)}${focusPillHtml}</span>
                         <span class="chat-time">${timeStr}</span>
                     </div>
                     <div class="chat-phone">${escapeHtml(displayPhone)}</div>
                     <div class="chat-preview-row">
                         <span class="chat-preview">
-                            ${escapeHtml(previewText)}
+                            ${previewText}
                         </span>
                     </div>
                 </div>

@@ -5,7 +5,8 @@ const {
     fetchLatestBaileysVersion,
     proto,
     WAMessageStubType,
-    Browsers
+    Browsers,
+    jidNormalizedUser
 } = require('@whiskeysockets/baileys');
 const pino = require('pino');
 const path = require('path');
@@ -40,18 +41,42 @@ function notifyState(state, extra = {}) {
     }
 }
 
+// Helper to recursively unwrap container messages (deviceSentMessage, ephemeralMessage, viewOnce, etc.)
+function normalizeMessage(msg) {
+    if (!msg) return null;
+    let m = msg.message;
+    if (!m) return null;
+    while (m) {
+        if (m.deviceSentMessage?.message) {
+            m = m.deviceSentMessage.message;
+        } else if (m.ephemeralMessage?.message) {
+            m = m.ephemeralMessage.message;
+        } else if (m.viewOnceMessage?.message) {
+            m = m.viewOnceMessage.message;
+        } else if (m.viewOnceMessageV2?.message) {
+            m = m.viewOnceMessageV2.message;
+        } else if (m.documentWithCaptionMessage?.message) {
+            m = m.documentWithCaptionMessage.message;
+        } else {
+            break;
+        }
+    }
+    return m;
+}
+
 function extractMessageText(msg) {
-    if (!msg || !msg.message) return '';
-    const m = msg.message;
+    if (!msg) return '';
+    const m = normalizeMessage(msg);
+    if (!m) return '';
     if (m.conversation) return m.conversation;
     if (m.extendedTextMessage?.text) return m.extendedTextMessage.text;
-    if (m.imageMessage?.caption) return `📷 Foto: ${m.imageMessage.caption}`;
+    if (m.imageMessage?.caption) return `📷 ${m.imageMessage.caption}`;
     if (m.imageMessage) return '📷 [Foto]';
-    if (m.videoMessage?.caption) return `🎥 Video: ${m.videoMessage.caption}`;
+    if (m.videoMessage?.caption) return `🎥 ${m.videoMessage.caption}`;
     if (m.videoMessage) return '🎥 [Video]';
-    if (m.audioMessage) return '🎵 [Pesan Suara / Audio]';
-    if (m.documentMessage?.fileName) return `📄 Dokumen: ${m.documentMessage.fileName}`;
-    if (m.documentMessage?.caption) return `📄 Dokumen: ${m.documentMessage.caption}`;
+    if (m.audioMessage) return '🎵 [Audio]';
+    if (m.documentMessage?.fileName) return `📄 ${m.documentMessage.fileName}`;
+    if (m.documentMessage?.caption) return `📄 ${m.documentMessage.caption}`;
     if (m.documentMessage) return '📄 [Dokumen]';
     if (m.stickerMessage) return '🏷️ [Stiker]';
     if (m.contactMessage?.displayName) return `👤 Kontak: ${m.contactMessage.displayName}`;
@@ -61,8 +86,9 @@ function extractMessageText(msg) {
 }
 
 function determineMessageType(msg) {
-    if (!msg || !msg.message) return 'unknown';
-    const m = msg.message;
+    if (!msg) return 'unknown';
+    const m = normalizeMessage(msg);
+    if (!m) return 'unknown';
     if (m.conversation || m.extendedTextMessage) return 'text';
     if (m.imageMessage) return 'image';
     if (m.videoMessage) return 'video';
@@ -151,7 +177,7 @@ async function startWhatsApp() {
             }
         });
 
-        // Handle incoming / historical messages
+        // Handle incoming / historical messages (Baik Pesan Masuk Maupun Pesan Keluar dari Target)
         sock.ev.on('messages.upsert', async (m) => {
             const messages = m.messages;
             if (!messages || !Array.isArray(messages)) return;
@@ -161,8 +187,12 @@ async function startWhatsApp() {
                     const key = msg.key;
                     if (!key) continue;
 
-                    const chatJid = key.remoteJid;
-                    if (!chatJid || chatJid === 'status@broadcast') continue; // Skip WhatsApp status updates
+                    let chatJid = key.remoteJid;
+                    if (msg.message?.deviceSentMessage?.destinationJid) {
+                        chatJid = msg.message.deviceSentMessage.destinationJid;
+                    }
+                    if (!chatJid || chatJid === 'status@broadcast') continue; // Skip status broadcasts
+                    chatJid = jidNormalizedUser(chatJid);
 
                     // MODE FOKUS CHECK: Hanya menerima pesan dari nomor terpilih jika mode fokus aktif
                     const focusJid = db.getFocusJid();
@@ -171,35 +201,36 @@ async function startWhatsApp() {
                     }
 
                     // 1. DETECT REVOKE / PESAN TERHAPUS (Anti-Delete)
-                    const protocolMessage = msg.message?.protocolMessage;
+                    const protocolMessage = msg.message?.protocolMessage || normalizeMessage(msg)?.protocolMessage;
                     if (protocolMessage && (protocolMessage.type === 0 || protocolMessage.type === 'REVOKE')) {
                         const targetMessageId = protocolMessage.key?.id;
                         if (targetMessageId) {
                             console.log(`[WMK ANTI-DELETE] Terdeteksi pesan dihapus untuk ID: ${targetMessageId}`);
-                            const result = db.markMessageAsDeleted(targetMessageId);
+                            db.markMessageAsDeleted(targetMessageId);
                             if (ioInstance) {
                                 ioInstance.emit('message_deleted', {
                                     chatJid,
                                     messageId: targetMessageId,
                                     deletedAt: new Date().toISOString()
                                 });
+                                ioInstance.emit('chats_updated');
                             }
                         }
                         continue;
                     }
 
-                    // 2. REGULAR MESSAGE
+                    // 2. REGULAR MESSAGE (Pesan Masuk atau Pesan Keluar dari Target)
                     const text = extractMessageText(msg);
                     if (!text && !msg.message) continue;
 
                     const messageId = key.id;
-                    const fromMe = key.fromMe ? 1 : 0;
-                    const senderJid = key.participant || chatJid;
-                    const senderName = msg.pushName || (fromMe ? 'Saya' : '');
+                    const fromMe = Boolean(key.fromMe) ? 1 : 0;
+                    const senderJid = key.participant || (fromMe ? (connectedUserInfo?.id || chatJid) : chatJid);
+                    const senderName = fromMe ? 'Saya' : (msg.pushName || '');
                     const messageType = determineMessageType(msg);
                     const timestamp = (msg.messageTimestamp ? Number(msg.messageTimestamp) * 1000 : Date.now());
 
-                    // Save to SQLite
+                    // Save to SQLite (otomatis membuat / memperbarui chat di Layer 1)
                     db.saveMessage({
                         id: messageId,
                         chatJid,
@@ -231,6 +262,7 @@ async function startWhatsApp() {
                             isDeleted: 0,
                             is_deleted: 0
                         });
+                        ioInstance.emit('chats_updated');
                     }
                 } catch (err) {
                     console.error('[WMK] Gagal memproses pesan:', err);
@@ -257,9 +289,44 @@ async function startWhatsApp() {
                                 messageId,
                                 deletedAt: new Date().toISOString()
                             });
+                            ioInstance.emit('chats_updated');
                         }
                     }
                 }
+            }
+        });
+
+        // Chat synchronization events
+        sock.ev.on('chats.upsert', (newChats) => {
+            for (const c of newChats) {
+                if (!c.id || c.id === 'status@broadcast') continue;
+                const normalizedJid = jidNormalizedUser(c.id);
+                const contact = db.getContactByJid(normalizedJid);
+                const name = contact?.name || null;
+                db.upsertChat({
+                    jid: normalizedJid,
+                    name,
+                    phoneNumber: db.formatJidToNumber(normalizedJid),
+                    lastMessage: '',
+                    lastMessageTime: c.conversationTimestamp ? Number(c.conversationTimestamp) * 1000 : Date.now(),
+                    isGroup: normalizedJid.endsWith('@g.us') ? 1 : 0
+                });
+            }
+            if (ioInstance) {
+                ioInstance.emit('chats_updated');
+            }
+        });
+
+        sock.ev.on('chats.update', (chatUpdates) => {
+            for (const u of chatUpdates) {
+                if (!u.id || u.id === 'status@broadcast') continue;
+                const normalizedJid = jidNormalizedUser(u.id);
+                if (u.conversationTimestamp) {
+                    db.updateChatTimestamp(normalizedJid, Number(u.conversationTimestamp) * 1000);
+                }
+            }
+            if (ioInstance) {
+                ioInstance.emit('chats_updated');
             }
         });
 
@@ -269,7 +336,29 @@ async function startWhatsApp() {
                 if (!contact.id) continue;
                 const name = contact.notify || contact.verifiedName || contact.name;
                 if (name) {
-                    db.upsertChat({
+                    db.saveContact({
+                        jid: contact.id,
+                        name,
+                        phoneNumber: db.formatJidToNumber(contact.id)
+                    });
+                    const existing = db.getChatByJid(contact.id);
+                    if (existing && (!existing.name || existing.name === 'Saya' || existing.name === 'Tanpa Nama')) {
+                        db.upsertChat({
+                            jid: contact.id,
+                            name,
+                            phoneNumber: db.formatJidToNumber(contact.id)
+                        });
+                    }
+                }
+            }
+        });
+
+        sock.ev.on('contacts.update', (contacts) => {
+            for (const contact of contacts) {
+                if (!contact.id) continue;
+                const name = contact.notify || contact.verifiedName || contact.name;
+                if (name) {
+                    db.saveContact({
                         jid: contact.id,
                         name,
                         phoneNumber: db.formatJidToNumber(contact.id)

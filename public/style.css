@@ -362,6 +362,13 @@ body {
     line-height: 1.3;
 }
 
+.preview-check-icon {
+    color: #53BDEB;
+    font-weight: 700;
+    margin-right: 3px;
+    font-size: 13px;
+}
+
 /* Requirement #5: Pesan terhapus dot merah */
 .chat-preview.has-deleted {
     color: var(--red-alert);

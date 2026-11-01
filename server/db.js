@@ -52,7 +52,19 @@ function initDb() {
             key TEXT PRIMARY KEY,
             value TEXT
         );
+
+        CREATE TABLE IF NOT EXISTS contacts (
+            jid TEXT PRIMARY KEY,
+            name TEXT,
+            phone_number TEXT,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
     `);
+
+    // Ensure last_message_from_me column exists in chats
+    try {
+        db.prepare('ALTER TABLE chats ADD COLUMN last_message_from_me INTEGER DEFAULT 0').run();
+    } catch (e) {}
 }
 
 initDb();
@@ -105,21 +117,74 @@ function refreshExistingChatNumbers() {
 
 refreshExistingChatNumbers();
 
+// Contact management helpers
+function saveContact({ jid, name, phoneNumber }) {
+    if (!jid || !name) return;
+    const phone = phoneNumber || formatJidToNumber(jid);
+    db.prepare(`
+        INSERT INTO contacts (jid, name, phone_number, updated_at)
+        VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+        ON CONFLICT(jid) DO UPDATE SET
+            name = excluded.name,
+            phone_number = excluded.phone_number,
+            updated_at = CURRENT_TIMESTAMP
+    `).run(jid, name, phone);
+}
+
+function getContactByJid(jid) {
+    if (!jid) return null;
+    const cleanJid = String(jid).split(':')[0];
+    let row = db.prepare('SELECT * FROM contacts WHERE jid = ?').get(cleanJid);
+    if (!row) {
+        const resolved = resolveLidToPhone(jid);
+        if (resolved) {
+            row = db.prepare('SELECT * FROM contacts WHERE phone_number LIKE ? OR jid LIKE ?').get(`%${resolved}%`, `%${resolved}%`);
+        }
+    }
+    return row;
+}
+
 // Save or update chat metadata
-function upsertChat({ jid, name, phoneNumber, lastMessage, lastMessageTime, isGroup, isDeleted = 0 }) {
+function upsertChat({ jid, name, phoneNumber, lastMessage, lastMessageTime, isGroup, isDeleted = 0, isFromMe = 0 }) {
+    if (!jid) return;
     const isGrp = isGroup ? 1 : (jid.endsWith('@g.us') ? 1 : 0);
     const phone = phoneNumber || formatJidToNumber(jid);
-    const displayName = name || phone || 'Tanpa Nama';
+
+    // Look up contact name if name is empty or was 'Saya'
+    let finalName = name;
+    if (!finalName || finalName === 'Saya') {
+        const contact = getContactByJid(jid);
+        if (contact && contact.name) {
+            finalName = contact.name;
+        }
+    }
+    const displayName = finalName || phone || 'Tanpa Nama';
 
     const stmt = db.prepare(`
-        INSERT INTO chats (jid, name, phone_number, last_message, last_message_time, last_message_deleted, is_group, updated_at)
-        VALUES (@jid, @name, @phoneNumber, @lastMessage, @lastMessageTime, @isDeleted, @isGroup, CURRENT_TIMESTAMP)
+        INSERT INTO chats (jid, name, phone_number, last_message, last_message_time, last_message_deleted, last_message_from_me, is_group, updated_at)
+        VALUES (@jid, @name, @phoneNumber, @lastMessage, @lastMessageTime, @isDeleted, @isFromMe, @isGroup, CURRENT_TIMESTAMP)
         ON CONFLICT(jid) DO UPDATE SET
-            name = CASE WHEN @name IS NOT NULL AND @name != '' THEN @name ELSE chats.name END,
-            phone_number = CASE WHEN @phoneNumber IS NOT NULL AND @phoneNumber != '' THEN @phoneNumber ELSE chats.phone_number END,
-            last_message = CASE WHEN @lastMessage IS NOT NULL THEN @lastMessage ELSE chats.last_message END,
-            last_message_time = CASE WHEN @lastMessageTime IS NOT NULL AND @lastMessageTime > chats.last_message_time THEN @lastMessageTime ELSE chats.last_message_time END,
-            last_message_deleted = CASE WHEN @isDeleted = 1 THEN 1 ELSE chats.last_message_deleted END,
+            name = CASE 
+                WHEN @name IS NOT NULL AND @name != '' AND @name != 'Saya' THEN @name 
+                ELSE chats.name 
+            END,
+            phone_number = CASE 
+                WHEN @phoneNumber IS NOT NULL AND @phoneNumber != '' THEN @phoneNumber 
+                ELSE chats.phone_number 
+            END,
+            last_message = CASE 
+                WHEN @lastMessage IS NOT NULL THEN @lastMessage 
+                ELSE chats.last_message 
+            END,
+            last_message_time = CASE 
+                WHEN @lastMessageTime IS NOT NULL AND @lastMessageTime >= chats.last_message_time THEN @lastMessageTime 
+                ELSE chats.last_message_time 
+            END,
+            last_message_deleted = CASE 
+                WHEN @isDeleted = 1 THEN 1 
+                ELSE chats.last_message_deleted 
+            END,
+            last_message_from_me = @isFromMe,
             updated_at = CURRENT_TIMESTAMP
     `);
 
@@ -127,15 +192,27 @@ function upsertChat({ jid, name, phoneNumber, lastMessage, lastMessageTime, isGr
         jid,
         name: displayName,
         phoneNumber: phone,
-        lastMessage: lastMessage || '',
+        lastMessage: lastMessage !== undefined ? lastMessage : '',
         lastMessageTime: lastMessageTime || Date.now(),
         isDeleted: isDeleted ? 1 : 0,
+        isFromMe: isFromMe ? 1 : 0,
         isGroup: isGrp
     });
 }
 
+function updateChatTimestamp(jid, timestamp) {
+    if (!jid || !timestamp) return;
+    db.prepare(`
+        UPDATE chats 
+        SET last_message_time = CASE WHEN ? > last_message_time THEN ? ELSE last_message_time END,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE jid = ?
+    `).run(timestamp, timestamp, jid);
+}
+
 // Save message
 function saveMessage({ id, chatJid, senderJid, senderName, fromMe, text, messageType = 'text', timestamp, rawJson = null }) {
+    const isFromMe = (fromMe === 1 || fromMe === true) ? 1 : 0;
     const stmt = db.prepare(`
         INSERT OR IGNORE INTO messages (id, chat_jid, sender_jid, sender_name, from_me, text, message_type, timestamp, raw_json)
         VALUES (@id, @chatJid, @senderJid, @senderName, @fromMe, @text, @messageType, @timestamp, @rawJson)
@@ -146,20 +223,25 @@ function saveMessage({ id, chatJid, senderJid, senderName, fromMe, text, message
         chatJid,
         senderJid,
         senderName: senderName || '',
-        fromMe: fromMe ? 1 : 0,
+        fromMe: isFromMe,
         text: text || '',
         messageType,
         timestamp: timestamp || Date.now(),
         rawJson: rawJson ? JSON.stringify(rawJson) : null
     });
 
-    // Also update last message in chat
+    // If incoming message, senderName is the contact's name.
+    // If outgoing message (fromMe), do NOT set chat.name to 'Saya' or senderName!
+    const chatContactName = isFromMe ? null : senderName;
+
+    // Update or insert chat row on Layer 1
     upsertChat({
         jid: chatJid,
-        name: senderName,
+        name: chatContactName,
         lastMessage: text,
         lastMessageTime: timestamp,
-        isDeleted: 0
+        isDeleted: 0,
+        isFromMe: isFromMe
     });
 }
 
@@ -339,6 +421,9 @@ module.exports = {
     initDb,
     upsertChat,
     saveMessage,
+    saveContact,
+    getContactByJid,
+    updateChatTimestamp,
     markMessageAsDeleted,
     getChats,
     getChatByJid,
