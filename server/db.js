@@ -272,14 +272,10 @@ function clearFocusJid() {
     return null;
 }
 
-// Clear all messages for a specific chat (Fitur Layer 1)
+// Clear all messages & remove chat from Layer 1 (Fitur Layer 1)
 function clearChatMessages(chatJid) {
     db.prepare('DELETE FROM messages WHERE chat_jid = ?').run(chatJid);
-    db.prepare(`
-        UPDATE chats 
-        SET last_message = '', last_message_deleted = 0 
-        WHERE jid = ?
-    `).run(chatJid);
+    db.prepare('DELETE FROM chats WHERE jid = ?').run(chatJid);
     return true;
 }
 

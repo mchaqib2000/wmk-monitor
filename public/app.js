@@ -309,6 +309,7 @@ document.addEventListener('DOMContentLoaded', () => {
         chats.forEach((chat) => {
             const item = document.createElement('div');
             item.className = 'chat-item';
+            item.setAttribute('data-chat-jid', chat.jid);
 
             const displayPhone = formatDisplayNumber(chat.phone_number, chat.jid);
             const initials = getInitials(chat.name || displayPhone);
@@ -390,10 +391,17 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
+        const chatJidToDelete = currentSettingsChat.jid;
         chatSettingsModal.classList.remove('active');
         try {
-            await fetch(`/api/chats/${encodeURIComponent(currentSettingsChat.jid)}/clear-messages`, { method: 'POST' });
-            loadChatList(searchInput.value);
+            const res = await fetch(`/api/chats/${encodeURIComponent(chatJidToDelete)}/clear-messages`, { method: 'POST' });
+            if (res.ok) {
+                const chatEl = document.querySelector(`[data-chat-jid="${chatJidToDelete}"]`);
+                if (chatEl) chatEl.remove();
+                loadChatList(searchInput.value);
+            } else {
+                alert("Server belum dimuat ulang. Silakan tutup jendela hitam start.bat lalu buka lagi!");
+            }
         } catch (e) {
             console.error('Gagal menghapus pesan chat:', e);
         }
@@ -402,16 +410,21 @@ document.addEventListener('DOMContentLoaded', () => {
     // Modal Action 2: Toggle Mode Fokus
     btnToggleFocusMode.addEventListener('click', async () => {
         if (!currentSettingsChat) return;
+        const chatJidToFocus = currentSettingsChat.jid;
         chatSettingsModal.classList.remove('active');
         try {
             const res = await fetch('/api/focus/toggle', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ jid: currentSettingsChat.jid })
+                body: JSON.stringify({ jid: chatJidToFocus })
             });
-            const data = await res.json();
-            updateFocusBanner(data);
-            loadChatList(searchInput.value);
+            if (res.ok) {
+                const data = await res.json();
+                updateFocusBanner(data);
+                loadChatList(searchInput.value);
+            } else {
+                alert("Server belum dimuat ulang. Silakan tutup jendela hitam start.bat lalu buka lagi!");
+            }
         } catch (e) {
             console.error('Gagal mengubah mode fokus:', e);
         }

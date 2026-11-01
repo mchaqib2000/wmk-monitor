@@ -20,9 +20,17 @@ if not exist node_modules (
     call npm install
 )
 
+:loop
 echo Menjalankan WMK Server...
 echo Buka browser di komputer: http://localhost:3000
 echo Atau buka dari HP Android: cek IP yang muncul di bawah
 echo.
 node server/index.js
-pause
+echo.
+echo ========================================================
+echo Server terhenti. Memulai ulang otomatis dalam 2 detik...
+echo (Tutup jendela ini jika ingin mematikan server)
+echo ========================================================
+timeout /t 2 /nobreak >nul
+cls
+goto loop
