@@ -129,6 +129,15 @@ function saveContact({ jid, name, phoneNumber }) {
             phone_number = excluded.phone_number,
             updated_at = CURRENT_TIMESTAMP
     `).run(jid, name, phone);
+
+    // Otomatis perbarui nama chat jika kontak sudah tersimpan di buku telepon target
+    try {
+        db.prepare(`
+            UPDATE chats 
+            SET name = ?, updated_at = CURRENT_TIMESTAMP 
+            WHERE (jid = ? OR phone_number = ?) AND (name IS NULL OR name = '' OR name = 'Tanpa Nama' OR name != ?)
+        `).run(name, jid, phone, name);
+    } catch (e) {}
 }
 
 function getContactByJid(jid) {

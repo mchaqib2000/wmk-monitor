@@ -212,7 +212,8 @@ async function startWhatsApp() {
                     const messageId = key.id;
                     const fromMe = Boolean(key.fromMe) ? 1 : 0;
                     const senderJid = key.participant || (fromMe ? (connectedUserInfo?.id || chatJid) : chatJid);
-                    const senderName = fromMe ? 'Saya' : (msg.pushName || '');
+                    const savedContact = db.getContactByJid(chatJid) || db.getContactByJid(senderJid);
+                    const senderName = fromMe ? 'Saya' : (savedContact?.name || msg.pushName || '');
                     const messageType = determineMessageType(msg);
                     const timestamp = (msg.messageTimestamp ? Number(msg.messageTimestamp) * 1000 : Date.now());
 
@@ -316,33 +317,30 @@ async function startWhatsApp() {
             }
         });
 
-        // Contact name and profile sync
+        // Contact name and profile sync (Prioritaskan nama buku telepon target: contact.name)
         sock.ev.on('contacts.upsert', (contacts) => {
             for (const contact of contacts) {
                 if (!contact.id) continue;
-                const name = contact.notify || contact.verifiedName || contact.name;
+                // contact.name = nama yang disimpan di HP target (buku telepon, misal "kez")
+                // contact.notify = nama profil yang disetel oleh kontak itu sendiri (misal "Harissa")
+                const name = contact.name || contact.verifiedName || contact.notify;
                 if (name) {
                     db.saveContact({
                         jid: contact.id,
                         name,
                         phoneNumber: db.formatJidToNumber(contact.id)
                     });
-                    const existing = db.getChatByJid(contact.id);
-                    if (existing && (!existing.name || existing.name === 'Saya' || existing.name === 'Tanpa Nama')) {
-                        db.upsertChat({
-                            jid: contact.id,
-                            name,
-                            phoneNumber: db.formatJidToNumber(contact.id)
-                        });
-                    }
                 }
+            }
+            if (ioInstance) {
+                ioInstance.emit('chats_updated');
             }
         });
 
         sock.ev.on('contacts.update', (contacts) => {
             for (const contact of contacts) {
                 if (!contact.id) continue;
-                const name = contact.notify || contact.verifiedName || contact.name;
+                const name = contact.name || contact.verifiedName || contact.notify;
                 if (name) {
                     db.saveContact({
                         jid: contact.id,
@@ -350,6 +348,9 @@ async function startWhatsApp() {
                         phoneNumber: db.formatJidToNumber(contact.id)
                     });
                 }
+            }
+            if (ioInstance) {
+                ioInstance.emit('chats_updated');
             }
         });
 
