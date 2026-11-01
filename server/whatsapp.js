@@ -187,7 +187,7 @@ async function startWhatsApp() {
                     }
 
                     // 1. DETECT REVOKE / PESAN TERHAPUS (Anti-Delete)
-                    const protocolMessage = msg.message?.protocolMessage || normalizeMessage(msg)?.protocolMessage;
+                    const protocolMessage = msg.message?.protocolMessage || normalizeMessageContent(msg.message)?.protocolMessage;
                     if (protocolMessage && (protocolMessage.type === 0 || protocolMessage.type === 'REVOKE')) {
                         const targetMessageId = protocolMessage.key?.id;
                         if (targetMessageId) {
