@@ -207,13 +207,19 @@ async function startWhatsApp() {
                         ioInstance.emit('new_message', {
                             id: messageId,
                             chatJid,
+                            chat_jid: chatJid,
                             senderJid,
+                            sender_jid: senderJid,
                             senderName,
+                            sender_name: senderName,
                             fromMe,
+                            from_me: fromMe,
                             text,
                             messageType,
+                            message_type: messageType,
                             timestamp,
-                            isDeleted: 0
+                            isDeleted: 0,
+                            is_deleted: 0
                         });
                     }
                 } catch (err) {

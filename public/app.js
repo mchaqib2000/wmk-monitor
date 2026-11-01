@@ -141,8 +141,9 @@ document.addEventListener('DOMContentLoaded', () => {
     // Realtime new message
     socket.on('new_message', (msg) => {
         console.log('[WMK] Pesan baru diterima:', msg);
+        const msgChatJid = msg.chatJid || msg.chat_jid;
         // If current chat is open, append message
-        if (currentScreen === 'screen-chat-view' && activeChatJid === msg.chatJid) {
+        if (currentScreen === 'screen-chat-view' && activeChatJid === msgChatJid) {
             appendMessage(msg);
             scrollMessagesToBottom();
         }
@@ -513,21 +514,23 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Append single message bubble
     function appendMessage(msg, chat = null) {
+        const isFromMe = (msg.from_me === 1 || msg.from_me === true || msg.fromMe === 1 || msg.fromMe === true);
+        const isDeleted = (msg.is_deleted === 1 || msg.isDeleted === 1);
+        const timeStr = formatTime(msg.timestamp);
+
         const bubble = document.createElement('div');
-        bubble.className = `msg-bubble ${msg.from_me ? 'sent' : 'received'}`;
+        bubble.className = `msg-bubble ${isFromMe ? 'sent' : 'received'}`;
         bubble.setAttribute('data-msg-id', msg.id);
 
-        const isDeleted = msg.is_deleted === 1;
         if (isDeleted) {
             bubble.classList.add('is-deleted');
         }
 
-        const timeStr = formatTime(msg.timestamp);
-
-        // Group sender name if received in group
+        // Sender name (always display sender name when received)
+        const senderName = msg.sender_name || msg.senderName || '';
         let senderHtml = '';
-        if (!msg.from_me && msg.sender_name) {
-            senderHtml = `<div class="msg-sender-name">${escapeHtml(msg.sender_name)}</div>`;
+        if (!isFromMe && senderName) {
+            senderHtml = `<div class="msg-sender-name">${escapeHtml(senderName)}</div>`;
         }
 
         // Anti-Delete banner
@@ -558,7 +561,7 @@ document.addEventListener('DOMContentLoaded', () => {
             <div class="msg-text">${escapeHtml(msg.text)}</div>
             <div class="msg-meta">
                 <span>${timeStr}</span>
-                ${msg.from_me ? `
+                ${isFromMe ? `
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#53BDEB" stroke-width="2">
                         <polyline points="20 6 9 17 4 12"></polyline>
                     </svg>
