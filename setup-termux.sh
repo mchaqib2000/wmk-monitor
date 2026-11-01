@@ -6,28 +6,32 @@ echo "========================================================"
 echo "    Menginstall WMK - WhatsApp Monitor di HP Android    "
 echo "========================================================"
 
+# Mencegah HP menidurkan proses saat layar mati
+termux-wake-lock 2>/dev/null || true
+
 # 1. Update paket Termux
-echo "[1/4] Memperbarui paket Termux..."
+echo "[1/4] Memperbarui repositori Termux..."
 pkg update -y && pkg upgrade -y
 
-# 2. Install Node.js dan dependensi sistem
-echo "[2/4] Menginstall Node.js & Git..."
-pkg install -y nodejs-lts git python make clang
+# 2. Install Node.js dan dependensi compiler
+echo "[2/4] Menginstall Node.js, Python, Git & Compiler..."
+pkg install -y nodejs-lts git python make clang build-essential
 
 # 3. Masuk ke direktori dan install modul
 echo "[3/4] Mengunduh modul dependensi WhatsApp..."
 npm install
 
-# 4. Selesai dan petunjuk menjalankan
+# 4. Berikan izin eksekusi script start
+chmod +x start.sh 2>/dev/null || true
+
 echo "========================================================"
 echo "          INSTALASI SELESAI DENGAN SUKSES!              "
 echo "========================================================"
-echo "Untuk menjalankan WMK di HP kapan saja, ketik:"
-echo "  node server/index.js"
+echo "Untuk menjalankan WMK kapan saja di HP Anda, ketik:"
+echo "  ./start.sh"
 echo ""
-echo "Lalu buka Chrome di HP dan ketik: http://localhost:3000"
+echo "Lalu buka Google Chrome di HP: http://localhost:3000"
 echo "========================================================"
 
 # Jalankan langsung
-echo "Menjalankan WMK sekarang..."
-node server/index.js
+bash start.sh
