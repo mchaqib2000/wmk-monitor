@@ -52,16 +52,54 @@ function initDb() {
 
 initDb();
 
-// Helper to format WhatsApp JID into clean readable phone number
+// Helper to resolve WhatsApp LID (Privacy / Linked ID) to real phone number
+function resolveLidToPhone(jid) {
+    if (!jid) return '';
+    if (jid.endsWith('@lid')) {
+        const lidNum = jid.split('@')[0].split(':')[0];
+        const mappingFile = path.join(dataDir, 'auth_info_wmk', `lid-mapping-${lidNum}_reverse.json`);
+        try {
+            if (fs.existsSync(mappingFile)) {
+                const raw = fs.readFileSync(mappingFile, 'utf8');
+                const cleanPhone = JSON.parse(raw);
+                if (cleanPhone) return String(cleanPhone);
+            }
+        } catch (e) {}
+    }
+    return jid.split('@')[0].split(':')[0];
+}
+
+// Helper to format WhatsApp JID into clean readable phone number (+62 ...)
 function formatJidToNumber(jid) {
     if (!jid) return '';
     if (jid.endsWith('@g.us')) return 'Grup WhatsApp';
-    const numberOnly = jid.split('@')[0].split(':')[0];
-    if (numberOnly.startsWith('62')) {
-        return `+62 ${numberOnly.slice(2, 5)}-${numberOnly.slice(5, 9)}-${numberOnly.slice(9)}`;
+    const numberOnly = resolveLidToPhone(jid);
+    const clean = String(numberOnly).replace(/[^0-9]/g, '');
+    if (clean.startsWith('62')) {
+        return `+62 ${clean.slice(2, 5)}-${clean.slice(5, 9)}-${clean.slice(9)}`;
     }
-    return `+${numberOnly}`;
+    if (clean.startsWith('08')) {
+        return `+62 ${clean.slice(1, 4)}-${clean.slice(4, 8)}-${clean.slice(8)}`;
+    }
+    return `+${clean}`;
 }
+
+// Refresh and update any existing chats that stored raw LID numbers
+function refreshExistingChatNumbers() {
+    try {
+        const chats = db.prepare('SELECT jid, phone_number FROM chats').all();
+        for (const chat of chats) {
+            const resolved = formatJidToNumber(chat.jid);
+            if (resolved && resolved !== chat.phone_number) {
+                db.prepare('UPDATE chats SET phone_number = ? WHERE jid = ?').run(resolved, chat.jid);
+            }
+        }
+    } catch (e) {
+        console.error('Gagal memperbarui nomor LID:', e);
+    }
+}
+
+refreshExistingChatNumbers();
 
 // Save or update chat metadata
 function upsertChat({ jid, name, phoneNumber, lastMessage, lastMessageTime, isGroup, isDeleted = 0 }) {
