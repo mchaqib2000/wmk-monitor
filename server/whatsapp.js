@@ -6,7 +6,9 @@ const {
     proto,
     WAMessageStubType,
     Browsers,
-    jidNormalizedUser
+    jidNormalizedUser,
+    getContentType,
+    normalizeMessageContent
 } = require('@whiskeysockets/baileys');
 const pino = require('pino');
 const path = require('path');
@@ -41,63 +43,47 @@ function notifyState(state, extra = {}) {
     }
 }
 
-// Helper to recursively unwrap container messages (deviceSentMessage, ephemeralMessage, viewOnce, etc.)
-function normalizeMessage(msg) {
-    if (!msg) return null;
-    let m = msg.message;
-    if (!m) return null;
-    while (m) {
-        if (m.deviceSentMessage?.message) {
-            m = m.deviceSentMessage.message;
-        } else if (m.ephemeralMessage?.message) {
-            m = m.ephemeralMessage.message;
-        } else if (m.viewOnceMessage?.message) {
-            m = m.viewOnceMessage.message;
-        } else if (m.viewOnceMessageV2?.message) {
-            m = m.viewOnceMessageV2.message;
-        } else if (m.documentWithCaptionMessage?.message) {
-            m = m.documentWithCaptionMessage.message;
-        } else {
-            break;
-        }
-    }
-    return m;
-}
-
+// Helper to extract clean message content and skip internal WhatsApp encryption/protocol stanzas
 function extractMessageText(msg) {
-    if (!msg) return '';
-    const m = normalizeMessage(msg);
+    if (!msg || !msg.message) return '';
+    const m = normalizeMessageContent(msg.message);
     if (!m) return '';
-    if (m.conversation) return m.conversation;
-    if (m.extendedTextMessage?.text) return m.extendedTextMessage.text;
-    if (m.imageMessage?.caption) return `📷 ${m.imageMessage.caption}`;
-    if (m.imageMessage) return '📷 [Foto]';
-    if (m.videoMessage?.caption) return `🎥 ${m.videoMessage.caption}`;
-    if (m.videoMessage) return '🎥 [Video]';
-    if (m.audioMessage) return '🎵 [Audio]';
-    if (m.documentMessage?.fileName) return `📄 ${m.documentMessage.fileName}`;
-    if (m.documentMessage?.caption) return `📄 ${m.documentMessage.caption}`;
-    if (m.documentMessage) return '📄 [Dokumen]';
-    if (m.stickerMessage) return '🏷️ [Stiker]';
-    if (m.contactMessage?.displayName) return `👤 Kontak: ${m.contactMessage.displayName}`;
-    if (m.locationMessage) return '📍 [Lokasi]';
-    if (m.reactionMessage) return ''; // Skip reactions
-    return '[Pesan]';
+    const type = getContentType(m);
+    if (!type) return ''; // Skip internal stanzas like senderKeyDistributionMessage
+
+    if (type === 'conversation') return m.conversation || '';
+    if (type === 'extendedTextMessage') return m.extendedTextMessage?.text || '';
+    if (type === 'imageMessage') return m.imageMessage?.caption ? `📷 ${m.imageMessage.caption}` : '📷 [Foto]';
+    if (type === 'videoMessage') return m.videoMessage?.caption ? `🎥 ${m.videoMessage.caption}` : '🎥 [Video]';
+    if (type === 'audioMessage') return '🎵 [Audio]';
+    if (type === 'documentMessage') return m.documentMessage?.fileName ? `📄 ${m.documentMessage.fileName}` : (m.documentMessage?.caption ? `📄 ${m.documentMessage.caption}` : '📄 [Dokumen]');
+    if (type === 'stickerMessage') return '🏷️ [Stiker]';
+    if (type === 'contactMessage') return m.contactMessage?.displayName ? `👤 Kontak: ${m.contactMessage.displayName}` : '👤 [Kontak]';
+    if (type === 'locationMessage') return '📍 [Lokasi]';
+    if (type === 'reactionMessage') return ''; // Skip reactions
+    if (type === 'pollCreationMessage' || type === 'pollCreationMessageV2' || type === 'pollCreationMessageV3') {
+        const poll = m[type];
+        return `📊 Polling: ${poll?.name || ''}`;
+    }
+
+    return '';
 }
 
 function determineMessageType(msg) {
-    if (!msg) return 'unknown';
-    const m = normalizeMessage(msg);
+    if (!msg || !msg.message) return 'unknown';
+    const m = normalizeMessageContent(msg.message);
     if (!m) return 'unknown';
-    if (m.conversation || m.extendedTextMessage) return 'text';
-    if (m.imageMessage) return 'image';
-    if (m.videoMessage) return 'video';
-    if (m.audioMessage) return 'audio';
-    if (m.documentMessage) return 'document';
-    if (m.stickerMessage) return 'sticker';
-    if (m.contactMessage) return 'contact';
-    if (m.locationMessage) return 'location';
-    return 'other';
+    const type = getContentType(m);
+    if (!type) return 'unknown';
+    if (type === 'conversation' || type === 'extendedTextMessage') return 'text';
+    if (type === 'imageMessage') return 'image';
+    if (type === 'videoMessage') return 'video';
+    if (type === 'audioMessage') return 'audio';
+    if (type === 'documentMessage') return 'document';
+    if (type === 'stickerMessage') return 'sticker';
+    if (type === 'contactMessage') return 'contact';
+    if (type === 'locationMessage') return 'location';
+    return type;
 }
 
 async function startWhatsApp() {
@@ -221,7 +207,7 @@ async function startWhatsApp() {
 
                     // 2. REGULAR MESSAGE (Pesan Masuk atau Pesan Keluar dari Target)
                     const text = extractMessageText(msg);
-                    if (!text && !msg.message) continue;
+                    if (!text) continue; // Skip internal protocol stanzas (e.g. senderKeyDistributionMessage)
 
                     const messageId = key.id;
                     const fromMe = Boolean(key.fromMe) ? 1 : 0;
@@ -240,7 +226,7 @@ async function startWhatsApp() {
                         text,
                         messageType,
                         timestamp,
-                        rawJson: null
+                        rawJson: msg
                     });
 
                     // Emit to real-time UI
