@@ -62,7 +62,6 @@ document.addEventListener('DOMContentLoaded', () => {
             alert("Cara pasang WMK ke layar utama:\n\n1. Ketuk ikon titik tiga (⋮) di pojok kanan atas browser Chrome.\n2. Pilih 'Instal aplikasi' atau 'Tambahkan ke Layar Utama'.\n3. Aplikasi WMK akan langsung muncul di menu HP Anda!");
         }
     });
-    });
 
     // Screen navigation helper
     function showScreen(screenId) {
