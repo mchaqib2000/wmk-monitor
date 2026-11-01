@@ -55,24 +55,23 @@ initDb();
 // Helper to resolve WhatsApp LID (Privacy / Linked ID) to real phone number
 function resolveLidToPhone(jid) {
     if (!jid) return '';
-    if (jid.endsWith('@lid')) {
-        const lidNum = jid.split('@')[0].split(':')[0];
-        const mappingFile = path.join(dataDir, 'auth_info_wmk', `lid-mapping-${lidNum}_reverse.json`);
-        try {
-            if (fs.existsSync(mappingFile)) {
-                const raw = fs.readFileSync(mappingFile, 'utf8');
-                const cleanPhone = JSON.parse(raw);
-                if (cleanPhone) return String(cleanPhone);
-            }
-        } catch (e) {}
-    }
-    return jid.split('@')[0].split(':')[0];
+    const cleanJid = String(jid).replace(/^\+/, '');
+    const lidNum = cleanJid.split('@')[0].split(':')[0];
+    const mappingFile = path.join(dataDir, 'auth_info_wmk', `lid-mapping-${lidNum}_reverse.json`);
+    try {
+        if (fs.existsSync(mappingFile)) {
+            const raw = fs.readFileSync(mappingFile, 'utf8');
+            const cleanPhone = JSON.parse(raw);
+            if (cleanPhone) return String(cleanPhone);
+        }
+    } catch (e) {}
+    return lidNum;
 }
 
 // Helper to format WhatsApp JID into clean readable phone number (+62 ...)
 function formatJidToNumber(jid) {
     if (!jid) return '';
-    if (jid.endsWith('@g.us')) return 'Grup WhatsApp';
+    if (String(jid).endsWith('@g.us')) return 'Grup WhatsApp';
     const numberOnly = resolveLidToPhone(jid);
     const clean = String(numberOnly).replace(/[^0-9]/g, '');
     if (clean.startsWith('62')) {
@@ -206,12 +205,25 @@ function getChats(query = '') {
 
     sql += ` ORDER BY c.last_message_time DESC`;
 
-    return db.prepare(sql).all(...params);
+    const chats = db.prepare(sql).all(...params);
+    return chats.map(c => {
+        const resolved = formatJidToNumber(c.jid);
+        return {
+            ...c,
+            phone_number: (resolved && resolved !== c.phone_number) ? resolved : c.phone_number
+        };
+    });
 }
 
 // Get specific chat metadata
 function getChatByJid(jid) {
-    return db.prepare('SELECT * FROM chats WHERE jid = ?').get(jid);
+    const chat = db.prepare('SELECT * FROM chats WHERE jid = ?').get(jid);
+    if (!chat) return null;
+    const resolved = formatJidToNumber(chat.jid);
+    return {
+        ...chat,
+        phone_number: (resolved && resolved !== chat.phone_number) ? resolved : chat.phone_number
+    };
 }
 
 // Get messages for chat view

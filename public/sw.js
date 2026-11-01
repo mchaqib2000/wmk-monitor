@@ -1,5 +1,5 @@
 // Service Worker for WMK (PWA)
-const CACHE_NAME = 'wmk-cache-v2';
+const CACHE_NAME = 'wmk-cache-v3';
 const STATIC_ASSETS = [
     '/',
     '/index.html',

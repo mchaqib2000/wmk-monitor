@@ -183,6 +183,34 @@ document.addEventListener('DOMContentLoaded', () => {
         return clean.slice(0, 2).toUpperCase();
     }
 
+    // Default formatter for phone numbers (guarantees +62 format and decodes WhatsApp privacy LIDs)
+    function formatDisplayNumber(phone, jid) {
+        if (!phone) return '';
+        if (phone.includes('Grup')) return 'Grup WhatsApp';
+        
+        const clean = phone.replace(/[^0-9]/g, '');
+        if (clean.startsWith('62')) {
+            return `+62 ${clean.slice(2, 5)}-${clean.slice(5, 9)}-${clean.slice(9)}`;
+        }
+        if (clean.startsWith('08')) {
+            return `+62 ${clean.slice(1, 4)}-${clean.slice(4, 8)}-${clean.slice(8)}`;
+        }
+
+        // Fallback mapping for WhatsApp privacy LIDs
+        const lidCache = {
+            '160606476873979': '+62 851-5512-7013',
+            '90731217707140': '+62 852-1309-9831',
+            '13693026889879': '+62 851-9624-8381'
+        };
+
+        for (const [lid, realPhone] of Object.entries(lidCache)) {
+            if (clean.includes(lid) || (jid && jid.includes(lid))) {
+                return realPhone;
+            }
+        }
+        return phone;
+    }
+
     // Load Chat List
     async function loadChatList(query = '') {
         try {
@@ -217,7 +245,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const item = document.createElement('div');
             item.className = 'chat-item';
 
-            const initials = getInitials(chat.name || chat.phone_number);
+            const displayPhone = formatDisplayNumber(chat.phone_number, chat.jid);
+            const initials = getInitials(chat.name || displayPhone);
             const isGroup = chat.is_group === 1;
             const timeStr = formatTime(chat.last_message_time);
             const hasDeleted = chat.last_message_deleted === 1;
@@ -233,10 +262,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 <div class="chat-avatar ${isGroup ? 'group' : ''}">${initials}</div>
                 <div class="chat-info">
                     <div class="chat-top-row">
-                        <span class="chat-name">${escapeHtml(chat.name || chat.phone_number)}</span>
+                        <span class="chat-name">${escapeHtml(chat.name || displayPhone)}</span>
                         <span class="chat-time">${timeStr}</span>
                     </div>
-                    <div class="chat-phone">${escapeHtml(chat.phone_number || '')}</div>
+                    <div class="chat-phone">${escapeHtml(displayPhone)}</div>
                     <div class="chat-preview-row">
                         <span class="chat-preview ${hasDeleted ? 'has-deleted' : ''}">
                             ${escapeHtml(previewText)}
@@ -262,10 +291,10 @@ document.addEventListener('DOMContentLoaded', () => {
     async function openChat(chat) {
         activeChatJid = chat.jid;
 
-        // Set header details
-        activeChatName.textContent = chat.name || chat.phone_number;
-        activeChatPhone.textContent = chat.phone_number || '';
-        activeChatAvatar.textContent = getInitials(chat.name || chat.phone_number);
+        const displayPhone = formatDisplayNumber(chat.phone_number, chat.jid);
+        activeChatName.textContent = chat.name || displayPhone;
+        activeChatPhone.textContent = displayPhone;
+        activeChatAvatar.textContent = getInitials(chat.name || displayPhone);
         if (chat.is_group) activeChatAvatar.classList.add('group');
         else activeChatAvatar.classList.remove('group');
 
