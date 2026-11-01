@@ -137,6 +137,8 @@ async function startWhatsApp() {
                     try {
                         fs.rmSync(authDir, { recursive: true, force: true });
                     } catch (e) {}
+                    console.log('[WMK] Sesi WhatsApp kedaluwarsa atau terputus (401). Menyiapkan Barcode QR baru dalam 2 detik...');
+                    setTimeout(() => startWhatsApp(), 2000);
                 } else {
                     notifyState('connecting', { reason: 'reconnecting' });
                     setTimeout(() => startWhatsApp(), 3000);
