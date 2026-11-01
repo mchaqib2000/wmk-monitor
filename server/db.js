@@ -312,6 +312,20 @@ function deleteMessageById(messageId) {
     return true;
 }
 
+// Batch delete multiple chats and their messages (Fitur Hapus Batch Pesan Layer 1)
+function batchDeleteChats(jids) {
+    if (!Array.isArray(jids) || jids.length === 0) return 0;
+    const placeholders = jids.map(() => '?').join(',');
+    
+    const tx = db.transaction((targets) => {
+        db.prepare(`DELETE FROM messages WHERE chat_jid IN (${placeholders})`).run(...targets);
+        const info = db.prepare(`DELETE FROM chats WHERE jid IN (${placeholders})`).run(...targets);
+        return info.changes;
+    });
+
+    return tx(jids);
+}
+
 // Reset data (optional admin action)
 function clearAllData() {
     db.exec(`
@@ -335,5 +349,6 @@ module.exports = {
     clearFocusJid,
     clearChatMessages,
     deleteMessageById,
+    batchDeleteChats,
     clearAllData
 };

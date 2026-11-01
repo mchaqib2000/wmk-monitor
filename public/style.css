@@ -945,3 +945,134 @@ body {
     color: #E53935;
     background-color: rgba(229, 57, 53, 0.1);
 }
+
+/* ================================================= */
+/* LAYER 1: BATCH DELETE CHATS / PESAN STYLES        */
+/* ================================================= */
+.batch-header {
+    background-color: var(--wa-teal);
+    color: #FFFFFF;
+    padding: 10px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    z-index: 21;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.15);
+}
+
+.batch-header-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.batch-count-text {
+    font-size: 16px;
+    font-weight: 700;
+    color: #FFFFFF;
+    letter-spacing: 0.3px;
+}
+
+.batch-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.batch-btn-pill {
+    background: rgba(255, 255, 255, 0.18);
+    border: 1px solid rgba(255, 255, 255, 0.35);
+    color: #FFFFFF;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 6px 12px;
+    border-radius: 16px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+    user-select: none;
+}
+
+.batch-btn-pill:hover, .batch-btn-pill:active {
+    background: rgba(255, 255, 255, 0.28);
+}
+
+.batch-trash-btn {
+    color: #FFFFFF;
+    background: transparent;
+    border-radius: 50%;
+    padding: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.2s, color 0.2s;
+}
+
+.batch-trash-btn:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+    background: transparent !important;
+}
+
+.batch-trash-btn:not(:disabled) {
+    color: #FF5252;
+    background: rgba(255, 255, 255, 0.15);
+}
+
+.batch-trash-btn:not(:disabled):hover, .batch-trash-btn:not(:disabled):active {
+    background: rgba(255, 82, 82, 0.25);
+    color: #FF1744;
+}
+
+/* Chat Item Checkbox for Batch Selection */
+.chat-batch-checkbox {
+    display: none;
+    width: 22px;
+    height: 22px;
+    border: 2px solid #8696A0;
+    border-radius: 6px;
+    align-items: center;
+    justify-content: center;
+    margin-right: 12px;
+    flex-shrink: 0;
+    transition: all 0.15s ease;
+    background-color: transparent;
+}
+
+.chat-batch-checkbox svg {
+    display: none;
+    stroke: #FFFFFF;
+}
+
+/* When Batch Mode is Active on Screen */
+.batch-mode .app-header {
+    display: none !important;
+}
+
+.batch-mode .batch-header {
+    display: flex !important;
+}
+
+.batch-mode .chat-batch-checkbox {
+    display: flex;
+}
+
+.batch-mode .chat-item-menu-btn {
+    display: none !important;
+}
+
+.batch-mode .chat-item {
+    cursor: pointer;
+}
+
+.chat-item.selected {
+    background-color: #E8F5E9 !important;
+}
+
+.chat-item.selected .chat-batch-checkbox {
+    background-color: #128C7E;
+    border-color: #128C7E;
+}
+
+.chat-item.selected .chat-batch-checkbox svg {
+    display: block;
+}

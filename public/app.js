@@ -8,6 +8,9 @@ document.addEventListener('DOMContentLoaded', () => {
     let activeFocusJid = null;
     let currentSettingsChat = null;
     let pendingDeleteMsgId = null;
+    let isBatchMode = false;
+    let selectedChatJids = new Set();
+    let loadedChats = [];
 
     // DOM Elements
     const screenQr = document.getElementById('screen-qr');
@@ -31,6 +34,21 @@ document.addEventListener('DOMContentLoaded', () => {
     const logoutModal = document.getElementById('logout-modal');
     const modalCancelBtn = document.getElementById('modal-cancel-btn');
     const modalConfirmLogoutBtn = document.getElementById('modal-confirm-logout-btn');
+
+    // Batch Mode Elements (Layer 1: Hapus Batch Pesan)
+    const batchModeBtn = document.getElementById('batch-mode-btn');
+    const batchHeader = document.getElementById('batch-header');
+    const batchCancelBtn = document.getElementById('batch-cancel-btn');
+    const batchCountLabel = document.getElementById('batch-count-label');
+    const batchSelectAllBtn = document.getElementById('batch-select-all-btn');
+    const batchDeleteBtn = document.getElementById('batch-delete-btn');
+
+    // Batch Delete Modal Elements (Layer 1)
+    const batchDeleteModal = document.getElementById('batch-delete-modal');
+    const batchDeleteModalTitle = document.getElementById('batch-delete-modal-title');
+    const batchDeleteModalDesc = document.getElementById('batch-delete-modal-desc');
+    const cancelBatchDeleteBtn = document.getElementById('cancel-batch-delete-btn');
+    const confirmBatchDeleteBtn = document.getElementById('confirm-batch-delete-btn');
 
     const installBanner = document.getElementById('install-banner');
     const installPwaBtn = document.getElementById('install-pwa-btn');
@@ -89,6 +107,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Screen navigation helper
     function showScreen(screenId) {
+        if (screenId !== 'screen-chat-list' && isBatchMode) {
+            exitBatchMode();
+        }
         [screenQr, screenChatList, screenChatView].forEach(s => s.classList.remove('active'));
         const target = document.getElementById(screenId);
         if (target) {
@@ -219,6 +240,21 @@ document.addEventListener('DOMContentLoaded', () => {
         loadChatList(searchInput.value);
     });
 
+    // Realtime Batch chats deleted event
+    socket.on('batch_chats_deleted', (data) => {
+        if (data && Array.isArray(data.jids)) {
+            data.jids.forEach(jid => {
+                if (activeChatJid === jid) {
+                    showScreen('screen-chat-list');
+                    activeChatJid = null;
+                }
+                const el = document.querySelector(`[data-chat-jid="${jid}"]`);
+                if (el) el.remove();
+            });
+            loadChatList(searchInput.value);
+        }
+    });
+
     // Formatting helpers
     function formatTime(timestamp) {
         if (!timestamp) return '';
@@ -292,9 +328,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Render Chat List (Requirement 3: Nama, Nomor, isi pesan 1 baris)
     function renderChatList(chats) {
+        loadedChats = chats || [];
         chatListContainer.innerHTML = '';
 
         if (!chats || chats.length === 0) {
+            if (isBatchMode) exitBatchMode();
             chatListContainer.innerHTML = `
                 <div class="empty-state">
                     <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -311,6 +349,9 @@ document.addEventListener('DOMContentLoaded', () => {
             const item = document.createElement('div');
             item.className = 'chat-item';
             item.setAttribute('data-chat-jid', chat.jid);
+            if (isBatchMode && selectedChatJids.has(chat.jid)) {
+                item.classList.add('selected');
+            }
 
             const displayPhone = formatDisplayNumber(chat.phone_number, chat.jid);
             const initials = getInitials(chat.name || displayPhone);
@@ -323,6 +364,11 @@ document.addEventListener('DOMContentLoaded', () => {
             const previewText = chat.last_message || 'Belum ada pesan';
 
             item.innerHTML = `
+                <div class="chat-batch-checkbox">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                        <polyline points="20 6 9 17 4 12"></polyline>
+                    </svg>
+                </div>
                 <div class="chat-avatar ${isGroup ? 'group' : ''}">${initials}</div>
                 <div class="chat-info">
                     <div class="chat-top-row">
@@ -349,16 +395,75 @@ document.addEventListener('DOMContentLoaded', () => {
             const menuBtnEl = item.querySelector('.chat-item-menu-btn');
             menuBtnEl.addEventListener('click', (e) => {
                 e.stopPropagation();
-                openChatSettings(chat);
+                if (!isBatchMode) {
+                    openChatSettings(chat);
+                }
             });
 
-            // Tapping item opens the chat view
+            // Tapping item opens the chat view or toggles batch selection
             item.addEventListener('click', () => {
-                openChat(chat);
+                if (isBatchMode) {
+                    toggleChatSelection(chat.jid, item);
+                } else {
+                    openChat(chat);
+                }
             });
 
             chatListContainer.appendChild(item);
         });
+
+        if (isBatchMode) {
+            updateBatchSelectionUI();
+        }
+    }
+
+    // ==========================================
+    // BATCH MODE MANAGEMENT (Layer 1)
+    // ==========================================
+    function enterBatchMode() {
+        isBatchMode = true;
+        selectedChatJids.clear();
+        screenChatList.classList.add('batch-mode');
+        batchHeader.style.display = 'flex';
+        document.querySelectorAll('.chat-item.selected').forEach(el => el.classList.remove('selected'));
+        updateBatchSelectionUI();
+    }
+
+    function exitBatchMode() {
+        isBatchMode = false;
+        selectedChatJids.clear();
+        screenChatList.classList.remove('batch-mode');
+        batchHeader.style.display = 'none';
+        document.querySelectorAll('.chat-item.selected').forEach(el => el.classList.remove('selected'));
+    }
+
+    function toggleChatSelection(jid, itemEl) {
+        if (selectedChatJids.has(jid)) {
+            selectedChatJids.delete(jid);
+            itemEl.classList.remove('selected');
+        } else {
+            selectedChatJids.add(jid);
+            itemEl.classList.add('selected');
+        }
+        updateBatchSelectionUI();
+    }
+
+    function updateBatchSelectionUI() {
+        const count = selectedChatJids.size;
+        batchCountLabel.textContent = `${count} dipilih`;
+
+        if (count > 0) {
+            batchDeleteBtn.removeAttribute('disabled');
+        } else {
+            batchDeleteBtn.setAttribute('disabled', 'true');
+        }
+
+        const totalItems = loadedChats.length;
+        if (totalItems > 0 && count === totalItems) {
+            batchSelectAllBtn.textContent = 'Batal Pilih';
+        } else {
+            batchSelectAllBtn.textContent = 'Pilih Semua';
+        }
     }
 
     // Open Chat Settings Modal (Layer 1)
@@ -450,6 +555,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Open Chat View (Requirement 4: tampilan chat sederhana)
     async function openChat(chat) {
+        if (isBatchMode) exitBatchMode();
         activeChatJid = chat.jid;
 
         const displayPhone = formatDisplayNumber(chat.phone_number, chat.jid);
@@ -607,6 +713,79 @@ document.addEventListener('DOMContentLoaded', () => {
     refreshChatsBtn.addEventListener('click', () => {
         loadChatList(searchInput.value);
     });
+
+    // Layer 1: Batch Mode Handlers
+    if (batchModeBtn) {
+        batchModeBtn.addEventListener('click', () => {
+            enterBatchMode();
+        });
+    }
+
+    if (batchCancelBtn) {
+        batchCancelBtn.addEventListener('click', () => {
+            exitBatchMode();
+        });
+    }
+
+    if (batchSelectAllBtn) {
+        batchSelectAllBtn.addEventListener('click', () => {
+            if (!loadedChats || loadedChats.length === 0) return;
+            if (selectedChatJids.size === loadedChats.length) {
+                // Deselect all
+                selectedChatJids.clear();
+                document.querySelectorAll('.chat-item.selected').forEach(el => el.classList.remove('selected'));
+            } else {
+                // Select all
+                loadedChats.forEach(c => selectedChatJids.add(c.jid));
+                document.querySelectorAll('.chat-item').forEach(el => el.classList.add('selected'));
+            }
+            updateBatchSelectionUI();
+        });
+    }
+
+    if (batchDeleteBtn) {
+        batchDeleteBtn.addEventListener('click', () => {
+            if (selectedChatJids.size === 0) return;
+            const count = selectedChatJids.size;
+            batchDeleteModalTitle.textContent = `Hapus ${count} Chat Terpilih?`;
+            batchDeleteModalDesc.textContent = `Seluruh riwayat pesan dari ${count} chat yang dipilih akan dihapus permanen dari monitoring.`;
+            batchDeleteModal.classList.add('active');
+        });
+    }
+
+    if (cancelBatchDeleteBtn) {
+        cancelBatchDeleteBtn.addEventListener('click', () => {
+            batchDeleteModal.classList.remove('active');
+        });
+    }
+
+    if (confirmBatchDeleteBtn) {
+        confirmBatchDeleteBtn.addEventListener('click', async () => {
+            if (selectedChatJids.size === 0) return;
+            const jidsToDelete = Array.from(selectedChatJids);
+            batchDeleteModal.classList.remove('active');
+
+            try {
+                const res = await fetch('/api/chats/batch-delete', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ jids: jidsToDelete })
+                });
+                if (res.ok) {
+                    jidsToDelete.forEach(jid => {
+                        const el = document.querySelector(`[data-chat-jid="${jid}"]`);
+                        if (el) el.remove();
+                    });
+                    exitBatchMode();
+                    loadChatList(searchInput.value);
+                } else {
+                    alert('Gagal menghapus pesan chat. Pastikan server aktif.');
+                }
+            } catch (err) {
+                console.error('Error saat hapus batch pesan:', err);
+            }
+        });
+    }
 
     // Logout Modal Handlers
     menuBtn.addEventListener('click', () => {

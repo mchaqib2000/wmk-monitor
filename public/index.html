@@ -72,6 +72,12 @@
                     </div>
                 </div>
                 <div class="header-actions">
+                    <button id="batch-mode-btn" class="icon-btn" title="Hapus Batch Pesan">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M9 11l3 3L22 4"></path>
+                            <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
+                        </svg>
+                    </button>
                     <button id="refresh-chats-btn" class="icon-btn" title="Segarkan">
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <path d="M23 4v6h-6M1 20v-6h6"></path>
@@ -83,6 +89,28 @@
                             <circle cx="12" cy="12" r="1"></circle>
                             <circle cx="12" cy="5" r="1"></circle>
                             <circle cx="12" cy="19" r="1"></circle>
+                        </svg>
+                    </button>
+                </div>
+            </header>
+
+            <!-- Batch Mode Header (Layer 1: Hapus Batch Pesan) -->
+            <header id="batch-header" class="batch-header" style="display: none;">
+                <div class="batch-header-left">
+                    <button id="batch-cancel-btn" class="icon-btn" title="Batal Hapus Batch">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                            <line x1="18" y1="6" x2="6" y2="18"></line>
+                            <line x1="6" y1="6" x2="18" y2="18"></line>
+                        </svg>
+                    </button>
+                    <span id="batch-count-label" class="batch-count-text">0 dipilih</span>
+                </div>
+                <div class="batch-header-actions">
+                    <button id="batch-select-all-btn" class="batch-btn-pill" title="Pilih Semua">Pilih Semua</button>
+                    <button id="batch-delete-btn" class="icon-btn batch-trash-btn" title="Hapus Chat Terpilih" disabled>
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="3 6 5 6 21 6"></polyline>
+                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
                         </svg>
                     </button>
                 </div>
@@ -214,6 +242,18 @@
                 <div class="modal-buttons">
                     <button id="cancel-delete-msg-btn" class="btn btn-secondary">Batal</button>
                     <button id="confirm-delete-msg-btn" class="btn btn-danger">Hapus Pesan</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Layer 1: Batch Delete Confirmation Modal -->
+        <div id="batch-delete-modal" class="modal-overlay">
+            <div class="modal-box">
+                <h3 id="batch-delete-modal-title">Hapus 0 Chat Terpilih?</h3>
+                <p id="batch-delete-modal-desc">Seluruh riwayat pesan dari chat yang dipilih akan dihapus permanen dari monitoring.</p>
+                <div class="modal-buttons">
+                    <button id="cancel-batch-delete-btn" class="btn btn-secondary">Batal</button>
+                    <button id="confirm-batch-delete-btn" class="btn btn-danger">Hapus Sekarang</button>
                 </div>
             </div>
         </div>

@@ -132,6 +132,17 @@ app.post('/api/chats/:jid/clear-messages', (req, res) => {
     res.json({ success: true, message: 'Semua pesan di chat ini berhasil dihapus' });
 });
 
+// 6b. Batch delete multiple chats (Fitur Layer 1: Hapus Batch Pesan)
+app.post('/api/chats/batch-delete', (req, res) => {
+    const { jids } = req.body;
+    if (!Array.isArray(jids) || jids.length === 0) {
+        return res.status(400).json({ success: false, message: 'Tidak ada chat yang dipilih' });
+    }
+    const count = db.batchDeleteChats(jids);
+    io.emit('batch_chats_deleted', { jids });
+    res.json({ success: true, count, message: `${count} chat berhasil dihapus` });
+});
+
 // 7. Delete single selected message (Fitur Layer 2)
 app.delete('/api/messages/:id', (req, res) => {
     const id = req.params.id;
